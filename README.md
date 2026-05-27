@@ -1,4 +1,4 @@
-# rrl_ism_analysis
+# rrl-ism-analysis
 
 A Python toolkit for the analysis of **carbon radio recombination lines (CRRLs)**
 observed with NenuFAR.
@@ -52,8 +52,8 @@ files/                    Reference data (tracked on git)
 Clone the repository and install in editable mode:
 
 ```bash
-git clone https://github.com/<your-username>/spectral_tools.git
-cd spectral_tools
+git clone https://github.com/LucieCros/rrl-ism-analysis.git
+cd rrl-ism-analysis
 pip install -e .
 ```
 
