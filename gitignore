@@ -40,6 +40,9 @@ outputs/
 results/
 figures/
 
+# grids - dust and chi²
+*.nc
+
 # Pickle cache files (except reference interpolators in files/)
 *.pkl
 *.pickle
