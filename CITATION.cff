@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Carbon recombination lines analysis with the NenuFAR interferometer"
+authors:
+  - family-names: Cros
+    given-names: Lucie
+year: 2025
+license: CC-BY-4.0
+repository-code: https://github.com/LucieCros/rrl-ism-analysis
+preferred-citation:
+  type: article
+  title: "Carbon recombination lines analysis with the NenuFAR interferometer"
+  authors:
+    - family-names: Cros
+      given-names: Lucie
+  year: 2025
+  doi: 10.1051/0004-6361/202555085
+  url: https://ui.adsabs.harvard.edu/link_gateway/2025A&A...701A.148C/doi:10.1051/0004-6361/202555085

@@ -216,4 +216,4 @@ grid_exploration  (imports atoms, tools)
 
 ## License
 
-MIT License — see `LICENSE` for details.
+CC BY 4.0 — see `LICENSE` for details. If you use this software, please cite it using `CITATION.cff`.

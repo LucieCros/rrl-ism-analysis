@@ -56,7 +56,7 @@ Quick start
 
 __version__ = "0.1.0"
 __author__  = "Lucie Cros"
-__license__ = ""
+__license__ = "CC BY 4.0"
 
 # ---------------------------------------------------------------------------
 # Public API — explicit re-exports for IDE auto-completion and `from

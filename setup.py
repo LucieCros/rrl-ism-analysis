@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="spectral_tools",
+    name="rrl-ism-analysis",
     version="0.1.0",
     author="Lucie Cros",
     description="CRRL spectral analysis toolkit for NenuFAR data",
