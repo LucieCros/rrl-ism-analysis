@@ -31,7 +31,7 @@ pipelines/                Executable scripts
 └── generate_grid.py      Generate parameter-space grids (coarse or fine)
 
 notebooks/                Jupyter exploration notebooks
-├── 1_Cloud-id_cleaned_commented.ipynb   ISM cloud identification (dust, CO, HI)
+├── 1_Cloud-id.ipynb                     ISM cloud identification (dust, CO, HI)
 ├── 3_Stacking.ipynb                     RRL profile stacking and visualisation
 ├── 4_Line-fitting.ipynb                 Voigt fitting on detected transitions
 └── 5_Grid-exploration.ipynb             Chi² grid exploration and parameter fitting
