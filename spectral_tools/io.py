@@ -40,14 +40,15 @@ Usage
 Dependencies
 ------------
 Internal: L1_class
+External: os
 """
 
-import L1_class as L1
+import os
+from spectral_tools import L1_class as L1
 
 
 # Default path to the RRL catalogue — override before calling if needed.
-DEFAULT_RRLS_PATH: str = "files/rrlines.csv"
-
+DEFAULT_RRLS_PATH: str = os.path.join(os.path.dirname(__file__), "..", "files", "rrlines.csv")
 
 def load_bloc(path_fits: str,
               path_rrls: str = DEFAULT_RRLS_PATH) -> L1.L1:

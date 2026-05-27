@@ -33,9 +33,9 @@ Internal: spectral_tools.atoms, spectral_tools.fitfunc
 
 External data files (loaded at import time)
 -------------------------------------------
-``files/B1B2.pickle``
+``../files/B1B2.pickle``
     Pre-computed bn·βn interpolators, dict ``{str(n): (f1, f2)}``.
-``files/alphagamma.pickle``
+``../files/alphagamma.pickle``
     Pre-computed collisional broadening interpolators
     ``(alpha_f, grad_alpha_f, gamma_f, grad_gamma_f)``.
 
@@ -82,7 +82,7 @@ c_kms = c.value * 1e-3
 
 #: Path to the directory containing the reference pickle files.
 #: Override this variable before importing if your files live elsewhere.
-FILES_PATH: str = "files/"
+FILES_PATH: str = os.path.join(os.path.dirname(__file__), "..", "files")
 
 
 def _load_interpolators(path: str) -> tuple:
@@ -692,7 +692,7 @@ def cost_function_multi(params, quantum_numbers, observation: np.ndarray,
 # ---------------------------------------------------------------------------
 
 def load_stacked_observations(source: str, path: str,
-                               source_info_file: str = "files/source_info.txt",
+                               source_info_file: str = os.path.join(os.path.dirname(__file__), "..", "files", "source_info.txt"),
                                n_max: int = 849,
                                new_velocity: float = None) -> tuple:
     """
