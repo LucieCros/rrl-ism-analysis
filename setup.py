@@ -4,7 +4,7 @@ setup(
     name="spectral_tools",
     version="0.1.0",
     author="Lucie Cros",
-    description="CRRL spectral analysis toolkit for NenuFAR/LOFAR data",
+    description="CRRL spectral analysis toolkit for NenuFAR data",
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
