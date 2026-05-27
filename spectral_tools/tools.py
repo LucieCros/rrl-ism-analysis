@@ -903,3 +903,34 @@ def weighted_avg_and_std(values: np.ndarray,
     average  = np.average(values, weights=weights)
     variance = np.average((values - average) ** 2, weights=weights)
     return average, np.sqrt(variance)
+    
+# ---------------------------------------------------------------------------
+# Conversion de coordonnées galactiques en coordonnées cartésiennes
+# ---------------------------------------------------------------------------
+
+
+def gal_to_cartesian(r, l, b, l0, b0):
+    """Convertit une position galactique relative en coordonnées cartésiennes.
+
+    Parameters
+    ----------
+    r : float or array-like
+        Distance radiale.
+    l, b : float
+        Longitude et latitude galactiques de la ligne de visée, en degrés.
+    l0, b0 : float
+        Longitude et latitude galactiques du centre de référence, en degrés.
+
+    Returns
+    -------
+    tuple
+        Coordonnées `(x, y, z)` dans le repère local centré sur `(l0, b0)`.
+    """
+    theta = (l - l0) * np.pi / 180
+    phi = (90 - (b - b0)) * np.pi / 180
+
+    x = r * np.sin(phi) * np.cos(theta)
+    y = r * np.sin(phi) * np.sin(theta)
+    z = r * np.cos(phi)
+    return x, y, z
+

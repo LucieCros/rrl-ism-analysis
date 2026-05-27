@@ -2,7 +2,7 @@
 import os
 import pickle
 import numpy as np
-import kd_utils
+from spectral_tools import kd_utils
 
 #
 # Reid+2019 A5 rotation model parameters
