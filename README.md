@@ -1,7 +1,7 @@
 # spectral_tools
 
 A Python toolkit for the analysis of **carbon radio recombination lines (CRRLs)**
-observed with NenuFAR and LOFAR.
+observed with NenuFAR.
 
 The package covers the full data analysis chain: from raw FITS blocs to
 physical parameter fitting, including spectral cleaning, stacking, Voigt
