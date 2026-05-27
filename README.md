@@ -1,4 +1,4 @@
-# spectral_tools
+# rrl_ism_analysis
 
 A Python toolkit for the analysis of **carbon radio recombination lines (CRRLs)**
 observed with NenuFAR.
