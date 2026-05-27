@@ -1,0 +1,38 @@
+# grid_config.yaml
+# =================
+# Configuration file for generate_grid.py
+#
+# Edit the parameter ranges and quantum numbers to adapt the grid to your
+# source and fitting requirements, then run:
+#
+#   python3 generate_grid.py --mode coarse --config grid_config.yaml
+#   python3 generate_grid.py --mode fine   --config grid_config.yaml
+#
+# Parameter ranges are specified as [start, stop, step] — same convention
+# as numpy.arange(start, stop, step).
+#
+# Quantum numbers are lists of integers. These should cover the range of
+# transitions detected in your stacked spectrum.
+# ---------------------------------------------------------------------------
+
+coarse:
+  outdir: "grids"
+  quantum_numbers: [446, 486, 516, 536, 556, 576, 596, 616,
+                    636, 656, 676, 696, 716, 736, 771]
+  parameters:
+    Te: [10,    500,  5]      # Electron temperature [K]
+    Ne: [0.01,  0.1,  0.005]  # Electron density [cm^-3]
+    T0: [0,     5000, 100]    # Galactic background brightness temperature [K]
+    L:  [0,     50,   1]      # Path length through the emitting region [pc]
+    vt: [0,     30,   1]      # Non-thermal (turbulent) velocity [km/s]
+
+fine:
+  outdir: "finegrids_beam1"
+  quantum_numbers: [527, 547, 567, 587, 607, 627, 647,
+                    667, 687, 707, 727, 762]
+  parameters:
+    Te: [10,    150,  2]      # Narrower range, finer resolution
+    Ne: [0.01,  0.06, 0.005]  # Narrower Ne range
+    T0: [0,     5000, 100]
+    L:  [0,     21,   1]      # Narrower L range
+    vt: [0,     20,   0.5]    # Finer vt resolution

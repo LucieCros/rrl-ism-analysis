@@ -1,0 +1,25 @@
+# Core scientific stack
+numpy
+scipy
+pandas
+astropy>=5.0
+matplotlib
+
+# Data formats
+xarray
+netCDF4
+h5py
+
+# Utilities
+tqdm
+pyyaml
+scikit-image
+
+# Optional — ISM maps
+# dustmaps          # pip install dustmaps  (required for spectral_tools.maps.DustMap)
+
+# Optional — grid generation
+# dask              # pip install dask      (speeds up large grid computations)
+
+# Optional — NenuFAR instrument model
+# nenupy            # pip install nenupy    (required for notebook 1)
