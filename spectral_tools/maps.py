@@ -317,7 +317,8 @@ class DustMap:
 
         n_peaks      = len(peak_indices)
         path_lengths = np.zeros(n_peaks)
-
+        peak_heights = Y[peak_indices]
+        
         if n_peaks == 0:
             return peak_indices, np.array([]), path_lengths
 
@@ -336,7 +337,8 @@ class DustMap:
         )
         # Convert from samples to kpc.
         path_lengths = widths_samp * dx
-
+        
+        # print(peak_heights*level, width_heights)
         # ----------------------------------------------------------------
         # Optional Gaussian override
         # ----------------------------------------------------------------
@@ -382,7 +384,7 @@ class DustMap:
                 # Vertical centroid marker.
                 ax.axvline(X[i], color=col, lw=0.8, ls=':')
                 # Path-length label above the peak.
-                ax.text(X[i], Y[i] * 1.05, f"{fw_pc:.0f} pc",
+                ax.text(X[i], Y[i], f"{fw_pc:.0f} pc",
                         color='k', va='bottom', ha='center', fontsize=10)
 
             # Level percentage shown once in the upper-left corner.
