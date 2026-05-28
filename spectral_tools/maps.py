@@ -217,6 +217,7 @@ class DustMap:
                           r_min: float = 0.0,
                           r_max: float = 2.0,
                           search_radius: int = 30,
+                          level: float = 0.5,
                           flags: list | None = None,
                           large_peaks: list | None = None,
                           small_peaks: list | None = None,
@@ -226,24 +227,26 @@ class DustMap:
                           colors: list | None = None) -> tuple:
         """
         Detect ISM clouds in a dust extinction profile and estimate their
-        line-of-sight path length (depth) via FWHM measurement.
-
+        line-of-sight path length (depth) via full-width measurement.
+ 
         Each extinction peak is treated independently.  Two measurement
         strategies are available per peak:
-
-        - **Direct FWHM** (default): locates the two half-maximum crossings
-          on either side of the peak.  Robust for well-resolved, isolated
-          peaks.
+ 
+        - **Direct full-width** (default): locates the two crossings of the
+          ``level`` fraction of the peak maximum on either side of the peak.
+          ``level=0.5`` gives the standard FWHM; any value in ``(0, 1)`` is
+          accepted (e.g. ``level=0.1`` for a full-width at 10 % maximum).
         - **Gaussian fit** (``fit_gaussian=True`` or peak listed in
-          ``gaussian_peaks``): fits a 1-D Gaussian and derives the FWHM from
-          the fitted sigma.  Better for blended or noisy peaks.
-
+          ``gaussian_peaks``): fits a 1-D Gaussian and derives the full-width
+          analytically from the fitted sigma and the requested ``level``.
+          Better for blended or noisy peaks.
+ 
         Per-peak window adjustments are supported via ``large_peaks`` and
         ``small_peaks`` (search radius ×2 or ÷2 respectively).
-
-        Optionally draws FWHM markers and peak labels onto a Matplotlib axes
+ 
+        Optionally draws width markers and peak labels onto a Matplotlib axes
         when ``ax`` is provided.
-
+ 
         Parameters
         ----------
         extinctions : numpy.ndarray
@@ -254,11 +257,18 @@ class DustMap:
         r_max : float, optional
             End of the physical distance axis [kpc].  Default 2.
         search_radius : int, optional
-            Half-window in *samples* used to locate half-maximum crossings.
+            Half-window in *samples* used to locate level crossings.
             Default 30.  Adjusted per peak via ``large_peaks``/``small_peaks``.
+        level : float, optional
+            Fraction of the peak maximum used as the width threshold.
+            Must be in the open interval ``(0, 1)``.  Default ``0.5``
+            (standard full-width at half-maximum).  Examples:
+ 
+            - ``0.5``  → FWHM  (full-width at half-maximum)
+            - ``0.1``  → FW10M (full-width at 10 % of maximum)
+            - ``0.9``  → FW90M (full-width at 90 % of maximum, narrow core)
         flags : list of int or None, optional
-            Sample indices of peaks to exclude entirely.  Default None (no
-            exclusions).
+            Sample indices of peaks to exclude entirely.  Default None.
         large_peaks : list of int or None, optional
             Sample indices of peaks that need a doubled search radius.
             Default None.
@@ -272,13 +282,13 @@ class DustMap:
             Sample indices of peaks to force Gaussian fitting on, regardless
             of the global ``fit_gaussian`` flag.  Default None.
         ax : matplotlib.axes.Axes or None, optional
-            If provided, draw FWHM brackets (``hlines``), peak centroids
+            If provided, draw width brackets (``hlines``), peak centroids
             (``axvline``) and path-length labels (``text``) onto this axes.
             If ``None`` (default), no plotting is performed.
         colors : list of str or None, optional
             Colours used for successive peak annotations when ``ax`` is given.
             If ``None``, the current Matplotlib property cycle is used.
-
+ 
         Returns
         -------
         peak_indices : numpy.ndarray of int
@@ -286,73 +296,87 @@ class DustMap:
         peak_distances : numpy.ndarray of float
             Physical distances of the peaks [kpc].
         path_lengths : numpy.ndarray of float
-            Estimated path length (FWHM) of each cloud [kpc].
-
+            Estimated full-width at ``level`` × maximum for each cloud [kpc].
+ 
         Notes
         -----
         Peak detection uses :func:`scipy.signal.find_peaks` with a minimum
         prominence of 1 % of the global maximum, which suppresses noise
         fluctuations while retaining genuine secondary peaks.
-
-        The returned ``path_lengths`` array is ordered to match
-        ``peak_indices`` and ``peak_distances`` (left to right in distance).
-
+ 
+        For the Gaussian case the full-width at level ``p`` is derived from
+        the fitted sigma as:
+ 
+        .. math::
+ 
+            \\text{FW} = 2\\sigma\\sqrt{-2\\ln(p)}
+ 
+        which reduces to the standard FWHM formula
+        :math:`2\\sigma\\sqrt{2\\ln 2}` when ``p = 0.5``.
+ 
         Examples
         --------
-        Basic usage — compute only, no plot:
-
-        >>> dm = DustMap()
-        >>> extinc = dm.extinction_los(coord, fov, delta)
+        Standard FWHM (default):
+ 
         >>> idx, dist, lengths = dm.get_length_clouds(extinc, r_max=2.0)
-        >>> for d, l in zip(dist, lengths):
-        ...     print(f"Cloud at {d:.2f} kpc, depth ≈ {l*1e3:.0f} pc")
-
+ 
+        Full-width at 10 % of maximum:
+ 
+        >>> idx, dist, lengths = dm.get_length_clouds(extinc, r_max=2.0,
+        ...                                            level=0.1)
+ 
         With inline plot annotation:
-
+ 
         >>> fig, ax = plt.subplots()
         >>> ax.plot(radii, extinc / extinc.max(), c="gray")
-        >>> idx, dist, lengths = dm.get_length_clouds(extinc, r_max=2.0, ax=ax)
+        >>> idx, dist, lengths = dm.get_length_clouds(extinc, r_max=2.0,
+        ...                                            level=0.5, ax=ax)
         """
+        if not 0.0 < level < 1.0:
+            raise ValueError(f"level must be in (0, 1), got {level!r}")
+ 
         # ----------------------------------------------------------------
         # Sanitise optional list arguments
         # ----------------------------------------------------------------
-        flags         = [] if flags         is None else list(flags)
-        large_peaks   = [] if large_peaks   is None else list(large_peaks)
-        small_peaks   = [] if small_peaks   is None else list(small_peaks)
+        flags          = [] if flags          is None else list(flags)
+        large_peaks    = [] if large_peaks    is None else list(large_peaks)
+        small_peaks    = [] if small_peaks    is None else list(small_peaks)
         gaussian_peaks = [] if gaussian_peaks is None else list(gaussian_peaks)
-
+ 
         Y = np.asarray(extinctions, dtype=float)
         X = np.linspace(r_min, r_max, len(Y))   # physical distance axis [kpc]
-
+ 
         rador = search_radius
-
+ 
+        # Label shown on the plot bracket, e.g. "FW50M" or "FW10M".
+        pct_label = f"FW{round(level * 100):.0f}M"
+ 
         # ----------------------------------------------------------------
         # Peak detection
         # ----------------------------------------------------------------
         peak_indices = find_peaks(Y, prominence=0.01 * np.nanmax(Y))[0]
         for f in flags:
             peak_indices = peak_indices[peak_indices != f]
-
-        n_peaks    = len(peak_indices)
+ 
+        n_peaks      = len(peak_indices)
         path_lengths = np.zeros(n_peaks)
-
+ 
         # ----------------------------------------------------------------
         # Colour cycle for optional plot annotation
         # ----------------------------------------------------------------
         if ax is not None:
             if colors is None:
-                prop_cycle  = plt.rcParams["axes.prop_cycle"]
-                colors      = prop_cycle.by_key()["color"]
-            # Ensure the list is long enough by cycling.
+                prop_cycle = plt.rcParams["axes.prop_cycle"]
+                colors     = prop_cycle.by_key()["color"]
             plot_colors = [colors[k % len(colors)] for k in range(n_peaks)]
-
+ 
         # ----------------------------------------------------------------
-        # Per-peak FWHM estimation
+        # Per-peak width estimation
         # ----------------------------------------------------------------
         for k, i in enumerate(peak_indices):
-            HALFMAX = Y[i] / 2.0
-            col     = plot_colors[k] if ax is not None else None
-
+            THRESHOLD = Y[i] * level   # level × peak value
+            col = plot_colors[k] if ax is not None else None
+ 
             # Determine search window for this peak.
             if i in small_peaks:
                 rad = rador // 2
@@ -360,16 +384,16 @@ class DustMap:
                 rad = 2 * rador
             else:
                 rad = rador
-
+ 
             use_gaussian = fit_gaussian or (i in gaussian_peaks)
-
+ 
             if use_gaussian:
                 # ---- Gaussian fit ----------------------------------------
                 rad_fit = 2 * rador
                 bounds  = np.array([
-                    [0.9 * Y[i],    1.1 * Y[i]],
-                    [X[i] - 0.2,    X[i] + 0.2],
-                    [0.0,           2.0 * rad_fit * (r_max - r_min) / len(Y)],
+                    [0.9 * Y[i],  1.1 * Y[i]],
+                    [X[i] - 0.2, X[i] + 0.2],
+                    [0.0,         2.0 * rad_fit * (r_max - r_min) / len(Y)],
                 ])
                 try:
                     popt, _ = curve_fit(
@@ -377,50 +401,52 @@ class DustMap:
                         bounds=bounds.T,
                         nan_policy="omit",
                     )
-                    fwhm          = 2.0 * np.sqrt(2.0 * np.log(2.0)) * popt[2]
+                    # Full-width at level p: 2σ√(-2 ln p)
+                    fw            = 2.0 * popt[2] * np.sqrt(-2.0 * np.log(level))
                     x0            = popt[1]
-                    path_lengths[k] = fwhm
-                    label         = f"{fwhm * 1e3:.0f} pc"
-
+                    path_lengths[k] = fw
+                    label         = f"{fw * 1e3:.0f} pc ({pct_label})"
+ 
                     if ax is not None:
-                        ax.hlines(popt[0] / 2,
-                                  x0 - fwhm / 2, x0 + fwhm / 2,
-                                  color=col, ls="--", label=label)
+                        ax.hlines(popt[0] * level,
+                                  x0 - fw / 2, x0 + fw / 2,
+                                  color=col, ls="--")
                         ax.axvline(x0, color=col, lw=0.8, ls=":")
                         ax.text(X[i], Y[i] * 1.05, label,
                                 color="k", va="bottom", ha="center",
                                 fontsize=10)
-
+ 
                 except RuntimeError:
-                    # Fit did not converge — fall back to direct FWHM.
+                    # Fit did not converge — fall back to direct measurement.
                     use_gaussian = False
-
+ 
             if not use_gaussian:
-                # ---- Direct FWHM from data --------------------------------
-                lo      = max(i - rad, 0)
-                hi      = min(i + rad, len(X))
-                above   = np.where(Y[lo:hi] > HALFMAX)[0]
-
+                # ---- Direct full-width from data -------------------------
+                lo    = max(i - rad, 0)
+                hi    = min(i + rad, len(X))
+                above = np.where(Y[lo:hi] > THRESHOLD)[0]
+ 
                 if len(above) < 2:
                     path_lengths[k] = 0.0
                     continue
-
+ 
                 start, end = above[0], above[-1]
                 x_start    = X[start + lo]
                 x_end      = X[end   + lo]
-                fwhm       = x_end - x_start
-                path_lengths[k] = fwhm
-                label      = f"{fwhm * 1e3:.0f} pc"
-
+                fw         = x_end - x_start
+                path_lengths[k] = fw
+                label      = f"{fw * 1e3:.0f} pc ({pct_label})"
+ 
                 if ax is not None:
-                    ax.hlines(HALFMAX, x_start, x_end,
-                              color=col, ls="--", label=label)
+                    ax.hlines(THRESHOLD, x_start, x_end,
+                              color=col, ls="--")
                     ax.axvline(X[i], color=col, lw=0.8, ls=":")
                     ax.text(X[i], Y[i] * 1.05, label,
                             color="k", va="bottom", ha="center",
                             fontsize=10)
-
+ 
         return peak_indices, X[peak_indices], path_lengths
+
 
     ### 3D plot of dust
     def dust_cube_3d(self,
