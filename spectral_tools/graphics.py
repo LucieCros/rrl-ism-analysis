@@ -24,7 +24,7 @@ matplotlib >= 3.5, numpy
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.ticker import AutoMinorLocator
+from matplotlib.ticker import AutoMinorLocator, LogLocator, NullFormatter
 from astropy.coordinates import SkyCoord
 
 # ---------------------------------------------------------------------------
@@ -128,38 +128,141 @@ def set_style(font_size: float = 15,
 # ---------------------------------------------------------------------------
 
 def set_axes(ax: plt.Axes,
-             x_minor_ticks: int = 10,
-             y_minor_ticks: int = 5,
-             major_len: float = 5.0,
-             minor_len: float = 2.0) -> None:
+             x_minor_ticks: int  = 10,
+             y_minor_ticks: int  = 5,
+             major_len: float    = 5.0,
+             minor_len: float    = 2.0,
+             tick_width: float   = 1.2,
+             label_pad: float    = 10,
+             xscale: str         = 'linear',
+             yscale: str         = 'linear') -> None:
     """
-    Apply publication-quality tick styling to a Matplotlib Axes.
+    Apply a coherent style to a Matplotlib axes.
 
-    Sets inward-pointing ticks with configurable minor subdivisions on both
-    axes. Mirrors the style used throughout the NenuFAR spectral pipeline
-    figures.
+    Adds minor ticks on all four sides of the frame, mirrors major and minor
+    ticks on the opposite axes (top and right), and points all ticks inward.
+    Labels on the mirrored axes are hidden so only the primary axis labels
+    are shown.
+
+    Logarithmic scaling is supported on either or both axes via ``xscale``
+    and ``yscale``.  In log mode, :class:`~matplotlib.ticker.LogLocator` and
+    :class:`~matplotlib.ticker.LogFormatterSciNotation` are used instead of
+    :class:`~matplotlib.ticker.AutoMinorLocator`, which is meaningless on a
+    logarithmic scale.
 
     Parameters
     ----------
-    ax : matplotlib.axes.Axes
-        Target axes object to style.
+    ax : plt.Axes
+        Target axes to style.
     x_minor_ticks : int, optional
-        Number of minor tick subdivisions on the x-axis. Default 10.
+        Number of minor tick intervals between major ticks on the x-axis
+        (linear scale only).  Default 10.
     y_minor_ticks : int, optional
-        Number of minor tick subdivisions on the y-axis. Default 5.
+        Number of minor tick intervals between major ticks on the y-axis
+        (linear scale only).  Default 5.
     major_len : float, optional
-        Length of major ticks in points. Default 5.
+        Length of major ticks [points].  Default 5.0.
     minor_len : float, optional
-        Length of minor ticks in points. Default 2.
-    """
-    ax.xaxis.set_minor_locator(AutoMinorLocator(x_minor_ticks))
-    ax.yaxis.set_minor_locator(AutoMinorLocator(y_minor_ticks))
-    ax.tick_params(axis="x", which="major", length=major_len)
-    ax.tick_params(axis="x", which="minor", length=minor_len)
-    ax.tick_params(axis="y", which="major", length=major_len)
-    ax.tick_params(axis="y", which="minor", length=minor_len)
-    ax.tick_params(axis="both", which="both", direction="in")
+        Length of minor ticks [points].  Default 2.0.
+    tick_width : float, optional
+        Width of all ticks [points].  Default 1.2.
+    label_pad : float, optional
+        Padding between major tick marks and their labels [points].
+        Default 10.
+    xscale : {'linear', 'log'}, optional
+        Scale of the x-axis.  Default ``'linear'``.
+    yscale : {'linear', 'log'}, optional
+        Scale of the y-axis.  Default ``'linear'``.
 
+    Examples
+    --------
+    Linear axes (default):
+
+    >>> set_axes(ax, x_minor_ticks=5, label_pad=5)
+
+    Log-log plot:
+
+    >>> set_axes(ax, xscale='log', yscale='log')
+
+    Semi-log (log x, linear y):
+
+    >>> set_axes(ax, xscale='log', y_minor_ticks=4)
+    """
+    # ----------------------------------------------------------------
+    # Apply axis scales
+    # ----------------------------------------------------------------
+    ax.set_xscale(xscale)
+    ax.set_yscale(yscale)
+
+    # ----------------------------------------------------------------
+    # X axis (bottom)
+    # ----------------------------------------------------------------
+    if xscale == 'log':
+        ax.xaxis.set_major_locator(LogLocator(base=10, numticks=15))
+        ax.xaxis.set_minor_locator(LogLocator(base=10,
+                                              subs=np.arange(2, 10) * 0.1,
+                                              numticks=15))
+        ax.xaxis.set_minor_formatter(NullFormatter())
+    else:
+        ax.xaxis.set_minor_locator(AutoMinorLocator(x_minor_ticks))
+
+    ax.tick_params(axis='x', which='major', length=major_len, width=tick_width)
+    ax.tick_params(axis='x', which='minor', length=minor_len, width=tick_width)
+
+    # Mirrored x axis (top) — ticks only, no labels.
+    axtop = ax.secondary_xaxis('top')
+    if xscale == 'log':
+        axtop.xaxis.set_major_locator(LogLocator(base=10, numticks=15))
+        axtop.xaxis.set_minor_locator(LogLocator(base=10,
+                                                  subs=np.arange(2, 10) * 0.1,
+                                                  numticks=15))
+        axtop.xaxis.set_minor_formatter(NullFormatter())
+    else:
+        axtop.xaxis.set_minor_locator(AutoMinorLocator(x_minor_ticks))
+
+    axtop.tick_params(axis='x', which='major', direction='in',
+                      length=major_len, width=tick_width)
+    axtop.tick_params(axis='x', which='minor', direction='in',
+                      length=minor_len, width=tick_width)
+    axtop.set_xticklabels([])
+
+    # ----------------------------------------------------------------
+    # Y axis (left)
+    # ----------------------------------------------------------------
+    if yscale == 'log':
+        ax.yaxis.set_major_locator(LogLocator(base=10, numticks=15))
+        ax.yaxis.set_minor_locator(LogLocator(base=10,
+                                              subs=np.arange(2, 10) * 0.1,
+                                              numticks=15))
+        ax.yaxis.set_minor_formatter(NullFormatter())
+    else:
+        ax.yaxis.set_minor_locator(AutoMinorLocator(y_minor_ticks))
+
+    ax.tick_params(axis='y', which='major', length=major_len, width=tick_width)
+    ax.tick_params(axis='y', which='minor', length=minor_len, width=tick_width)
+
+    # Mirrored y axis (right) — ticks only, no labels.
+    axright = ax.secondary_yaxis('right')
+    if yscale == 'log':
+        axright.yaxis.set_major_locator(LogLocator(base=10, numticks=15))
+        axright.yaxis.set_minor_locator(LogLocator(base=10,
+                                                    subs=np.arange(2, 10) * 0.1,
+                                                    numticks=15))
+        axright.yaxis.set_minor_formatter(NullFormatter())
+    else:
+        axright.yaxis.set_minor_locator(AutoMinorLocator(y_minor_ticks))
+
+    axright.tick_params(axis='y', which='major', direction='in',
+                        length=major_len, width=tick_width)
+    axright.tick_params(axis='y', which='minor', direction='in',
+                        length=minor_len, width=tick_width)
+    axright.set_yticklabels([])
+
+    # ----------------------------------------------------------------
+    # Global tick direction and label padding
+    # ----------------------------------------------------------------
+    ax.tick_params(axis='both', which='both', direction='in', width=tick_width)
+    ax.tick_params(axis='both', which='major', pad=label_pad)
 
 # ---------------------------------------------------------------------------
 # Colour utilities
