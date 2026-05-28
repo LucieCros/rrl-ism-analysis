@@ -25,7 +25,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
-
+from astropy.coordinates import SkyCoord
 
 # ---------------------------------------------------------------------------
 # Colour palette
@@ -43,6 +43,85 @@ COLORS: list[str] = [
     "olive",         # 6 — final cleaned spectrum
 ]
 
+# ---------------------------------------------------------------------------
+# Style settings
+# ---------------------------------------------------------------------------
+
+def set_style(font_size: float = 15,
+              label_size: float = 13,
+              axes_linewidth: float = 2.5,
+              lines_linewidth: float = 1.7,
+              major_tick_size: float = 5.0,
+              major_tick_width: float = 1.0,
+              minor_tick_size: float = 4.5,
+              minor_tick_width: float = 1.0,
+              font_family: str = "serif",
+              mathtext_fontset: str = "stix") -> None:
+    """
+    Apply the NenuFAR publication style to Matplotlib's global ``rcParams``.
+
+    Sets font, axis line widths and tick appearance consistently across all
+    subsequent figures in a session.  Call once at the top of a notebook or
+    script, before creating any figure.
+
+    All parameters have sensible defaults matching the style used throughout
+    the NenuFAR spectral pipeline notebooks.  Override individual values as
+    needed — for example, use ``font_size=17`` for larger slide figures.
+
+    Parameters
+    ----------
+    font_size : float, optional
+        Base font size for titles, labels and annotations [pt].  Default 15.
+    label_size : float, optional
+        Font size for tick labels [pt].  Default 13.
+    axes_linewidth : float, optional
+        Line width of the axes frame (spines) [pt].  Default 2.5.
+    lines_linewidth : float, optional
+        Default line width for plotted data lines [pt].  Default 1.7.
+    major_tick_size : float, optional
+        Length of major ticks [pt].  Default 5.0.
+    major_tick_width : float, optional
+        Width of major ticks [pt].  Default 1.0.
+    minor_tick_size : float, optional
+        Length of minor ticks [pt].  Default 4.5.
+    minor_tick_width : float, optional
+        Width of minor ticks [pt].  Default 1.0.
+    font_family : str, optional
+        Matplotlib font family string (e.g. ``'serif'``, ``'sans-serif'``).
+        Default ``'serif'``.
+    mathtext_fontset : str, optional
+        Matplotlib mathtext font set (e.g. ``'stix'``, ``'cm'``).
+        Default ``'stix'``.
+
+    Examples
+    --------
+    Default style (used in most notebooks):
+
+    >>> import spectral_tools.graphics as graphics
+    >>> graphics.set_style()
+
+    Larger fonts for presentation slides:
+
+    >>> graphics.set_style(font_size=17, label_size=15)
+
+    Sans-serif variant:
+
+    >>> graphics.set_style(font_family="sans-serif", mathtext_fontset="cm")
+    """
+    mpl.rcParams["mathtext.fontset"] = mathtext_fontset
+    mpl.rcParams["font.family"]      = font_family
+    mpl.rcParams["font.size"]        = font_size
+
+    mpl.rcParams["axes.linewidth"]   = axes_linewidth
+    mpl.rcParams["lines.linewidth"]  = lines_linewidth
+
+    for axis in ("xtick", "ytick"):
+        mpl.rcParams[f"{axis}.direction"]   = "in"
+        mpl.rcParams[f"{axis}.labelsize"]   = label_size
+        mpl.rcParams[f"{axis}.major.size"]  = major_tick_size
+        mpl.rcParams[f"{axis}.major.width"] = major_tick_width
+        mpl.rcParams[f"{axis}.minor.size"]  = minor_tick_size
+        mpl.rcParams[f"{axis}.minor.width"] = minor_tick_width
 
 # ---------------------------------------------------------------------------
 # Axes styling
@@ -423,3 +502,268 @@ def plot_subband(FREF: np.ndarray,
 
     fig.savefig(savename)
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Support functions for multi tracers plotting
+# ---------------------------------------------------------------------------
+
+def plot_spectrum_with_range(ax: plt.Axes,
+                             vel: np.ndarray,
+                             spectrum: np.ndarray,
+                             vmin: float,
+                             vmax: float,
+                             color: str = "blue",
+                             label: str | None = None,
+                             normalize: bool = True,
+                             xlim: tuple = (-20, 30),
+                             **set_axes_kwargs) -> None:
+    """
+    Plot a normalised PPV spectrum and highlight a selected velocity range.
+ 
+    The full spectrum is drawn in gray; the selected velocity interval
+    ``[vmin, vmax]`` is overdrawn in ``color`` with dotted boundary markers.
+    Intended for HI and CO spectra extracted from PPV cubes.
+ 
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Target axes.
+    vel : numpy.ndarray
+        Velocity axis [km/s].
+    spectrum : numpy.ndarray
+        Brightness-temperature spectrum [K] (or any consistent unit).
+    vmin, vmax : float
+        Lower and upper velocity bounds to highlight [km/s].
+    color : str, optional
+        Colour used for the highlighted range and boundary markers.
+        Default ``'blue'``.
+    label : str or None, optional
+        Legend label for the highlighted segment.  If ``None``, a default
+        ``'{vmin}–{vmax} km/s'`` label is used.
+    normalize : bool, optional
+        If ``True`` (default), divide the spectrum by its maximum before
+        plotting so the y-axis is in relative units [0–1].
+    xlim : tuple of float, optional
+        x-axis limits [km/s].  Default ``(-20, 30)``.
+    **set_axes_kwargs
+        Extra keyword arguments forwarded to :func:`set_axes`
+        (e.g. ``pad=5``, ``xgraduation=5``).
+ 
+    Examples
+    --------
+    >>> plot_spectrum_with_range(ax, velHI, specHI, vmin=-5, vmax=12,
+    ...                          color='steelblue', label='cloud A')
+    """
+    norm = np.nanmax(spectrum) if normalize else 1.0
+    spec_n = spectrum / norm
+    cond = (vel >= vmin) & (vel <= vmax)
+    lbl = label if label is not None else f"{vmin}–{vmax} km/s"
+ 
+    ax.plot(vel, spec_n, c="gray", zorder=1)
+    ax.plot(vel[cond], spec_n[cond], c=color, label=lbl, zorder=2)
+    ax.axvline(vmin, 0.05, 0.95, color=color, linestyle="dotted", linewidth=1)
+    ax.axvline(vmax, 0.05, 0.95, color=color, linestyle="dotted", linewidth=1)
+    ax.set_xlim(*xlim)
+    ax.set_ylim(-0.1, 1.1)
+    ax.set_xlabel("Velocity (km/s)")
+    ax.set_ylabel("Relative intensity")
+    set_axes(ax, **set_axes_kwargs)
+ 
+ 
+def plot_dust_profile(ax: plt.Axes,
+                      radii: np.ndarray,
+                      extinc: np.ndarray,
+                      cloud_distances_pc: np.ndarray | None = None,
+                      cloud_path_lengths_pc: np.ndarray | None = None,
+                      normalize: bool = True,
+                      color: str = "gray",
+                      cloud_color: str = "orange",
+                      **set_axes_kwargs) -> None:
+    """
+    Plot a 1-D dust extinction profile as a function of heliocentric distance.
+ 
+    Optionally overlay shaded bands that mark the extent of detected ISM
+    clouds (from :meth:`~spectral_tools.maps.DustMap.cloud_path_lengths`).
+ 
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Target axes.
+    radii : numpy.ndarray
+        Distance axis [kpc], shape ``(n_r,)``.
+    extinc : numpy.ndarray
+        Extinction profile [arbitrary], shape ``(n_r,)``.
+    cloud_distances_pc : numpy.ndarray or None, optional
+        Central distances of detected clouds [pc].  If provided together
+        with ``cloud_path_lengths_pc``, a shaded band and a dashed vertical
+        line are drawn for each cloud.
+    cloud_path_lengths_pc : numpy.ndarray or None, optional
+        FWHM path lengths of detected clouds [pc].  Must have the same
+        length as ``cloud_distances_pc``.
+    normalize : bool, optional
+        Divide the extinction by its maximum before plotting.  Default True.
+    color : str, optional
+        Line colour for the extinction profile.  Default ``'gray'``.
+    cloud_color : str, optional
+        Fill colour for the cloud FWHM bands.  Default ``'orange'``.
+    **set_axes_kwargs
+        Extra keyword arguments forwarded to :func:`set_axes`.
+ 
+    Examples
+    --------
+    >>> plot_dust_profile(ax, radiitot, extinc,
+    ...                   cloud_distances_pc=peak_dist,
+    ...                   cloud_path_lengths_pc=path_lengths)
+    """
+    norm = np.nanmax(extinc) if normalize else 1.0
+    ax.plot(radii, extinc / norm, c=color)
+ 
+    if cloud_distances_pc is not None and cloud_path_lengths_pc is not None:
+        for d_pc, pl_pc in zip(cloud_distances_pc, cloud_path_lengths_pc):
+            d_kpc      = d_pc  / 1000.0
+            half_kpc   = pl_pc / 2000.0
+            ax.axvspan(d_kpc - half_kpc, d_kpc + half_kpc,
+                       alpha=0.25, color=cloud_color, zorder=0)
+            ax.axvline(d_kpc, color=cloud_color, linestyle="--",
+                       linewidth=1, zorder=1)
+ 
+    ax.set_xlabel("Distance from the Sun (kpc)")
+    ax.set_ylabel("Relative absorption")
+    ax.set_title("Spatial distribution of dust")
+    ax.set_ylim(-0.1, 1.1)
+    set_axes(ax, **set_axes_kwargs)
+ 
+ 
+def overlay_positions(ax: plt.Axes,
+                      coord_source: SkyCoord,
+                      coords_off: list[SkyCoord],
+                      colors: list[str],
+                      source_label: str = "Source",
+                      off_labels: list[str] | None = None,
+                      source_marker: str = "*",
+                      off_marker: str = ".",
+                      source_ms: float = 12,
+                      off_ms: float = 10) -> None:
+    """
+    Overlay a primary source and a list of offset positions on a sky map.
+ 
+    Positions are plotted in Galactic coordinates (longitude, latitude).
+    The primary source is drawn as a star; offsets as filled circles.
+ 
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Target axes, assumed to have Galactic longitude on x and latitude
+        on y (consistent with :func:`imshow` extent in Galactic frame).
+    coord_source : astropy.coordinates.SkyCoord
+        Primary source position.
+    coords_off : list of astropy.coordinates.SkyCoord
+        Offset positions, one per entry.
+    colors : list of str
+        Colours for each offset position.  Must have the same length as
+        ``coords_off``.
+    source_label : str, optional
+        Legend label for the primary source.  Default ``'Source'``.
+    off_labels : list of str or None, optional
+        Legend labels for the offset positions.  If ``None``, labels are
+        generated automatically as ``'off_1'``, ``'off_2'``, …
+    source_marker : str, optional
+        Matplotlib marker for the primary source.  Default ``'*'``.
+    off_marker : str, optional
+        Matplotlib marker for offset positions.  Default ``'.'``.
+    source_ms : float, optional
+        Marker size for the primary source.  Default 12.
+    off_ms : float, optional
+        Marker size for offset positions.  Default 10.
+ 
+    Examples
+    --------
+    >>> overlay_positions(axmap, CoordSource, CoordsOff, colors,
+    ...                   source_label="Tau A")
+    """
+    if off_labels is None:
+        off_labels = [f"off_{i + 1}" for i in range(len(coords_off))]
+ 
+    ax.plot(coord_source.galactic.l.value,
+            coord_source.galactic.b.value,
+            marker=source_marker, c="black", ms=source_ms,
+            label=source_label, zorder=5)
+ 
+    for coord, col, lbl in zip(coords_off, colors, off_labels):
+        ax.plot(coord.galactic.l.value,
+                coord.galactic.b.value,
+                marker=off_marker, c=col, ms=off_ms,
+                label=lbl, zorder=4)
+ 
+ 
+def annotate_spectral_peaks(ax: plt.Axes,
+                             vel: np.ndarray,
+                             spectrum: np.ndarray,
+                             color: str = "black",
+                             vel_min: float = -40.0,
+                             vel_max: float = 40.0,
+                             text_offset_pixels: tuple = (-150, -50),
+                             arrow_kwargs: dict | None = None) -> np.ndarray:
+    """
+    Auto-detect and annotate spectral peaks in a velocity range.
+ 
+    Uses :func:`scipy.signal.find_peaks` to locate peaks in the window
+    ``[vel_min, vel_max]`` and draws an annotated arrow for each one.
+    Intended for HI or CO spectra displayed in offset-position panels.
+ 
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Target axes (the spectrum must already be plotted on it).
+    vel : numpy.ndarray
+        Velocity axis [km/s].
+    spectrum : numpy.ndarray
+        Spectrum values [K or relative].
+    color : str, optional
+        Arrow and text colour.  Default ``'black'``.
+    vel_min, vel_max : float, optional
+        Velocity window used for peak detection [km/s].
+        Default ``-40`` and ``40``.
+    text_offset_pixels : tuple of (int, int), optional
+        ``(dx, dy)`` pixel offset of the annotation text relative to the
+        peak.  Default ``(-150, -50)``.
+    arrow_kwargs : dict or None, optional
+        Extra keyword arguments merged into the ``arrowprops`` dict passed
+        to :func:`~matplotlib.axes.Axes.annotate`.  Defaults:
+        ``{'width': 1, 'headwidth': 5, 'headlength': 5}``.
+ 
+    Returns
+    -------
+    peak_velocities : numpy.ndarray
+        Velocities of the detected peaks [km/s].
+ 
+    Examples
+    --------
+    >>> annotate_spectral_peaks(ax, velHI, specHI, color='steelblue',
+    ...                          vel_min=-20, vel_max=20)
+    """
+    from scipy.signal import find_peaks
+ 
+    default_arrow = {"width": 1, "headwidth": 5, "headlength": 5}
+    if arrow_kwargs is not None:
+        default_arrow.update(arrow_kwargs)
+    default_arrow["color"] = color
+ 
+    cond = (vel >= vel_min) & (vel <= vel_max)
+    peak_idx = find_peaks(spectrum[cond])[0]
+ 
+    for km in peak_idx:
+        xm = vel[cond][km]
+        ym = spectrum[cond][km]
+        ax.annotate(
+            f"{xm:.0f} km/s",
+            xy=(xm, ym),
+            xytext=text_offset_pixels,
+            textcoords="offset pixels",
+            color=color,
+            arrowprops=default_arrow,
+        )
+ 
+    return vel[cond][peak_idx]
+ 

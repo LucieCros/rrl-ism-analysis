@@ -39,6 +39,9 @@ LOG_temp_*.txt
 outputs/
 results/
 figures/
+*.fits
+*.png
+*.pdf
 
 # grids - dust and chi²
 *.nc
