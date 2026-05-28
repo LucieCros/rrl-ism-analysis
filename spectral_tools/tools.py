@@ -1023,5 +1023,70 @@ def cartesian_to_galactic(x, y, z, l0, b0):
     b = b0 + delta_b
     return l, b, r
  
+# ---------------------------------------------------------------------------
+# Used to regroup elements based on a tolerance threshold
+# ---------------------------------------------------------------------------
 
+def find_group(val, groups, tol):
+    """Return the index of the first group whose representative is within tol,
+    or -1 if none found."""
+    for i, rep in enumerate(groups):
+        if abs(val - rep) <= tol:
+            return i
+    return -1
+ 
+ 
+def find_all_groups(keys, values_list, tol):
+    """Group entries across multiple sets by proximity of a key variable.
+ 
+    Two entries are considered the same group if their key values agree
+    within `tol`. The representative of each group is the key value of its
+    first member.
+ 
+    Parameters
+    ----------
+    keys        : list            — label for each set (e.g. line-of-sight names)
+    values_list : list of list of tuple — for each set, a list of (key_val, *data)
+                  where key_val is the variable used for grouping and *data is
+                  any additional payload to carry along.
+    tol         : float           — matching tolerance
+ 
+    Returns
+    -------
+    group_reps  : list — representative key value for each group
+    all_entries : list of tuple — (key, group_id, key_val, *data)
+ 
+    Examples
+    --------
+    Group clouds by distance across lines of sight:
+ 
+        values_list = [
+            list(zip(distances_A, sizes_A)),   # LoS A
+            list(zip(distances_B, sizes_B)),   # LoS B
+        ]
+        group_reps, entries = find_all_groups(los_names, values_list, tol=50)
+        # each entry: (los_name, group_id, distance, size)
+ 
+    Group stars by temperature across catalogues:
+ 
+        values_list = [
+            list(zip(temps_cat1, magnitudes_cat1)),
+            list(zip(temps_cat2, magnitudes_cat2)),
+        ]
+        group_reps, entries = find_all_groups(cat_names, values_list, tol=200)
+        # each entry: (cat_name, group_id, temperature, magnitude)
+    """
+    group_reps = []
+    all_entries = []
+ 
+    for key, values in zip(keys, values_list):
+        for entry in values:
+            key_val, *data = entry
+            g = find_group(key_val, group_reps, tol)
+            if g == -1:
+                g = len(group_reps)
+                group_reps.append(key_val)
+            all_entries.append((key, g, key_val, *data))
+ 
+    return group_reps, all_entries
 
