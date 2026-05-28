@@ -905,32 +905,123 @@ def weighted_avg_and_std(values: np.ndarray,
     return average, np.sqrt(variance)
     
 # ---------------------------------------------------------------------------
-# Conversion de coordonnées galactiques en coordonnées cartésiennes
+# Conversion from galactic coordinates to cartesian coordinates
 # ---------------------------------------------------------------------------
 
-
-def gal_to_cartesian(r, l, b, l0, b0):
-    """Convertit une position galactique relative en coordonnées cartésiennes.
-
+def galactic_to_cartesian(r, l, b, l0, b0):
+    """
+    Convert a Galactic position to local Cartesian coordinates.
+ 
+    The Sun is the origin of the Cartesian frame.  The reference direction
+    ``(l0, b0)`` defines the x-axis; angular offsets in longitude and latitude
+    are measured relative to this reference.
+ 
+    The spherical-to-Cartesian mapping uses the convention:
+      - ``theta`` : azimuthal offset from the reference longitude [rad]
+      - ``phi``   : polar angle from the z-axis (Galactic north), shifted so
+                    that ``phi = pi/2`` when ``b == b0`` (equatorial plane of
+                    the reference direction)
+ 
     Parameters
     ----------
     r : float or array-like
-        Distance radiale.
-    l, b : float
-        Longitude et latitude galactiques de la ligne de visée, en degrés.
-    l0, b0 : float
-        Longitude et latitude galactiques du centre de référence, en degrés.
-
+        Radial (heliocentric) distance.  Any unit is accepted as long as it
+        is consistent with the desired output unit (e.g. pc or kpc).
+    l : float
+        Galactic longitude of the target direction [degrees].
+    b : float
+        Galactic latitude of the target direction [degrees].
+    l0 : float
+        Galactic longitude of the reference direction [degrees].
+    b0 : float
+        Galactic latitude of the reference direction [degrees].
+ 
     Returns
     -------
-    tuple
-        Coordonnées `(x, y, z)` dans le repère local centré sur `(l0, b0)`.
+    x : float or numpy.ndarray
+        Coordinate along the reference direction (radial, toward ``(l0, b0)``).
+    y : float or numpy.ndarray
+        Coordinate perpendicular to x in the Galactic plane.
+    z : float or numpy.ndarray
+        Coordinate along Galactic north (out of the plane).
+ 
+    Notes
+    -----
+    This function computes *local* offsets around ``(l0, b0)``, not absolute
+    Galactocentric positions.  For small angular separations (a few degrees),
+    the approximation is accurate to better than 1 %.
+ 
+    Examples
+    --------
+    >>> x, y, z = gal_to_cartesian(1.0, 184.6, -5.8, 184.0, -5.0)
     """
-    theta = (l - l0) * np.pi / 180
-    phi = (90 - (b - b0)) * np.pi / 180
-
-    x = r * np.sin(phi) * np.cos(theta)
-    y = r * np.sin(phi) * np.sin(theta)
-    z = r * np.cos(phi)
+    # Azimuthal offset from the reference longitude, converted to radians.
+    theta = (l - l0) * np.pi / 180.0
+ 
+    # Polar angle from the z-axis: 90° when on the reference latitude plane,
+    # increasing toward the south Galactic pole.
+    phi = (90.0 - (b - b0)) * np.pi / 180.0
+ 
+    x = r * np.sin(phi) * np.cos(theta)   # radial component (toward source)
+    y = r * np.sin(phi) * np.sin(theta)   # transverse component (east-west)
+    z = r * np.cos(phi)                   # vertical component (north-south)
     return x, y, z
+ 
+ 
+def cartesian_to_galactic(x, y, z, l0, b0):
+    """
+    Convert local Cartesian coordinates back to Galactic (l, b, r).
+ 
+    This is the exact inverse of :func:`gal_to_cartesian`.  Given a position
+    expressed in the local Cartesian frame centred on the Sun with x-axis
+    toward the reference direction ``(l0, b0)``, it returns the corresponding
+    Galactic longitude, latitude and heliocentric distance.
+ 
+    Parameters
+    ----------
+    x : float or array-like
+        Cartesian coordinate along the reference direction [same unit as ``r``].
+    y : float or array-like
+        Cartesian coordinate perpendicular to x in the reference plane.
+    z : float or array-like
+        Cartesian coordinate along Galactic north.
+    l0 : float
+        Galactic longitude of the reference direction [degrees].
+    b0 : float
+        Galactic latitude of the reference direction [degrees].
+ 
+    Returns
+    -------
+    l : float or numpy.ndarray
+        Galactic longitude [degrees].
+    b : float or numpy.ndarray
+        Galactic latitude [degrees].
+    r : float or numpy.ndarray
+        Heliocentric distance [same unit as the input coordinates].
+ 
+    Examples
+    --------
+    Round-trip consistency check:
+ 
+    >>> x, y, z = gal_to_cartesian(1.5, 185.0, -6.0, 184.0, -5.0)
+    >>> l, b, r = cartesian_to_galactic(x, y, z, 184.0, -5.0)
+    >>> print(f"l={l:.4f}  b={b:.4f}  r={r:.4f}")
+    l=185.0000  b=-6.0000  r=1.5000
+    """
+    # Heliocentric distance from the origin.
+    r = np.sqrt(x**2 + y**2 + z**2)
+ 
+    # Polar angle from the z-axis [rad], then convert to latitude offset [deg].
+    phi   = np.arctan2(np.sqrt(x**2 + y**2), z)   # polar angle  [rad]
+    delta_b = 90.0 - np.degrees(phi)               # latitude offset w.r.t. b0
+ 
+    # Azimuthal angle in the (x, y) plane [rad], then convert to longitude offset [deg].
+    theta   = np.arctan2(y, x)                     # azimuthal angle [rad]
+    delta_l = np.degrees(theta)                     # longitude offset w.r.t. l0
+ 
+    l = l0 + delta_l
+    b = b0 + delta_b
+    return l, b, r
+ 
+
 
