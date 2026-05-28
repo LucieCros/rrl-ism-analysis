@@ -42,6 +42,7 @@ figures/
 *.fits
 *.png
 *.pdf
+*.tar.gz
 
 # grids - dust and chi²
 *.nc
