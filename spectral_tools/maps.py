@@ -638,9 +638,14 @@ class MapLoader:
         numpy.ndarray
             Moment-0 map (NaN where no valid data).
         """
+        
         c = np.copy(cube).astype(float)
         c[c < cutoff] = np.nan
-        m = np.nanmean(c, axis=vdim - 1)
+        
+        spatial_axes = [0, 1, 2]
+        spatial_axes.remove(2 * vdim % 3)
+        
+        m = np.nanmean(c, axis=tuple(({0,1,2}-set(spatial_axes))))
         return np.where(np.isfinite(m), m, np.nan)
 
     # -----------------------------------------------------------------------
@@ -803,15 +808,19 @@ class MapLoader:
 
         cube_vel   = np.copy(cube).astype(float)
         if tracer == "CO":
-            cube_vel[~vel_mask, :, :] = np.nan   # zero out outside range — CO: (lat,lon,vel)
+            cube_vel[:,:,~vel_mask] = np.nan   # zero out outside range — CO: (lat,lon,vel)
         else:
             cube_vel[~vel_mask, :, :] = np.nan   # HI: (vel, lat, lon)
 
         spatial_axes = [0, 1, 2]
         spatial_axes.remove(2 * vdim % 3)
-        mom0 = np.nanmean(cube_vel, axis=tuple(spatial_axes))
+        
+        densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
+        mom0 = densitymap * (densitymap/densitymap)
 
         return cube, vel, spectrum, lon_c, lat_c, mom0
+
+
 
     def mean_spectrum(self, coord: SkyCoord, tracer: str,
                       extension_fov: float) -> tuple:

@@ -744,7 +744,7 @@ def overlay_positions(ax: plt.Axes,
                       colors: list[str],
                       source_label: str = "Source",
                       off_labels: list[str] | None = None,
-                      source_marker: str = "*",
+                      source_marker: str = ".",
                       off_marker: str = ".",
                       source_ms: float = 12,
                       off_ms: float = 10) -> None:
