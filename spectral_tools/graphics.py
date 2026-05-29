@@ -26,6 +26,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator, LogLocator, NullFormatter
 from astropy.coordinates import SkyCoord
+from matplotlib.patches import Ellipse, Circle
 
 # ---------------------------------------------------------------------------
 # Colour palette
@@ -747,7 +748,8 @@ def overlay_positions(ax: plt.Axes,
                       source_marker: str = ".",
                       off_marker: str = ".",
                       source_ms: float = 12,
-                      off_ms: float = 10) -> None:
+                      off_ms: float = 10,
+                      beam_width: float | None = None) -> None:
     """
     Overlay a primary source and a list of offset positions on a sky map.
  
@@ -798,6 +800,15 @@ def overlay_positions(ax: plt.Axes,
                 coord.galactic.b.value,
                 marker=off_marker, c=col, ms=off_ms,
                 label=lbl, zorder=4)
+        if beam_width is not None :
+             ax.add_patch(Circle(
+                 xy=(coord.galactic.l.value, coord.galactic.b.value,),
+                 radius=beam_width/2,
+                 fill=False,
+                 linestyle="--",
+                 edgecolor=col,
+                 linewidth=1,
+             ))
  
  
 def annotate_spectral_peaks(ax: plt.Axes,

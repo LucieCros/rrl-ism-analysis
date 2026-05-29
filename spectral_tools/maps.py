@@ -647,7 +647,28 @@ class MapLoader:
         
         m = np.nanmean(c, axis=tuple(({0,1,2}-set(spatial_axes))))
         return np.where(np.isfinite(m), m, np.nan)
-
+        
+    @staticmethod
+    def moment1(cube: np.ndarray, tracer: str, cutoff: float = 0.0) -> np.ndarray:
+        vdim = self._VDIM[tracer]
+        
+        c = np.copy(cube).astype(float)
+        maximum = np.nanmax(c)
+        c[c < cutoff] = np.nan
+        # Tracer specific cutoff
+        
+        if tracer=="HI" :
+            c[c<0.1*maximum] = np.nan
+        elif tracer=="CO" :
+            c[c<1e-16] = np.nan
+        
+        spatial_axes = [0, 1, 2]
+        spatial_axes.remove(2 * vdim % 3)
+        
+        vel = self._get_velocity(hdu, tracer)
+        
+        m = np.nanmean(c*vel, axis = tuple(({0,1,2}-set(spatial_axes))))/np.nanmean(c, axis = tuple(({0,1,2}-set(spatial_axes))))
+        return np.where(np.isfinite(m), m, np.nan)
     # -----------------------------------------------------------------------
     # Cube cropping
     # -----------------------------------------------------------------------
@@ -814,13 +835,79 @@ class MapLoader:
 
         spatial_axes = [0, 1, 2]
         spatial_axes.remove(2 * vdim % 3)
-        
+
         densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
         mom0 = densitymap * (densitymap/densitymap)
 
         return cube, vel, spectrum, lon_c, lat_c, mom0
 
+    def moment1_crop(self, coord: SkyCoord, tracer: str,
+                     fov: tuple,
+                     v_start: float, v_stop: float,
+                     shape: str = "circle") -> tuple:
+        """
+        Compute the moment-1 map integrated over a velocity range.
 
+        Parameters
+        ----------
+        coord : astropy.coordinates.SkyCoord
+            Field centre.
+        tracer : str
+            ``'CO'`` or ``'HI'``.
+        fov : tuple of astropy.units.Quantity
+            Field of view.
+        v_start : float
+            Lower velocity bound [km/s].
+        v_stop : float
+            Upper velocity bound [km/s].
+        shape : str, optional
+            Aperture shape: ``'circle'`` or ``'square'``. Default ``'circle'``.
+
+        Returns
+        -------
+        cube : numpy.ndarray
+            Cropped PPV sub-cube.
+        vel : numpy.ndarray
+            Velocity axis [km/s].
+        spectrum : numpy.ndarray
+            Mean spectrum over the aperture.
+        lon_crop, lat_crop : numpy.ndarray
+            Spatial axes.
+        mom0 : numpy.ndarray
+            Moment-0 map integrated between ``v_start`` and ``v_stop``.
+        mom1 : numpy.ndarray
+            Moment-1 map integrated between ``v_start`` and ``v_stop``.
+        """
+        
+        crop_fn = self.crop_circle if shape == "circle" else self.crop_square
+        cube, vel, spectrum, lon_c, lat_c, _ = crop_fn(coord, tracer, fov)
+
+        vdim       = self._VDIM[tracer]
+        vel_mask   = (vel > v_start) & (vel < v_stop)
+
+        cube_vel   = np.copy(cube).astype(float)
+        if tracer == "CO":
+            cube_vel[:,:,~vel_mask] = np.nan   # zero out outside range — CO: (lat,lon,vel)
+        else:
+            cube_vel[~vel_mask, :, :] = np.nan   # HI: (vel, lat, lon)
+            vel_broad = vel[:,np.newaxis,np.newaxis] # broadcast before operation
+
+        spatial_axes = [0, 1, 2]
+        spatial_axes.remove(2 * vdim % 3)
+        
+        densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
+        mom0 = densitymap * (densitymap/densitymap)
+        
+        # Tracer specific cutoff
+        maximum = np.nanmax(cube_vel)
+        if tracer=="HI" :
+            cube_vel[cube_vel<0.1*maximum] = np.nan
+        elif tracer=="CO" :
+            cube_vel[cube_vel<1e-16] = np.nan
+        densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
+        mom1 = np.nanmean(cube_vel*vel_broad, axis = tuple(({0,1,2}-set(spatial_axes))))/densitymap * (densitymap/densitymap)
+
+        return cube, vel, spectrum, lon_c, lat_c, mom0, mom1
 
     def mean_spectrum(self, coord: SkyCoord, tracer: str,
                       extension_fov: float) -> tuple:
