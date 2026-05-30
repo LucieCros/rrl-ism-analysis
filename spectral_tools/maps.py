@@ -41,6 +41,7 @@ import os
 
 import numpy as np
 from astropy.coordinates import SkyCoord
+from astropy.time import Time, TimeDelta
 from astropy.io import fits
 import astropy.units as u
 from scipy.signal import find_peaks, peak_widths, peak_prominences
@@ -53,15 +54,17 @@ import xarray as xr
 from nenupy.astro.sky import Sky
 from nenupy.instru import NenuFAR, NenuFAR_Configuration
 from nenupy.instru.nenufar import Polarization
-
+from nenupy.astro.target import FixedTarget
+from nenupy.astro.pointing import Pointing
 # ===========================================================================
 # NenuFAR BEAM SIMULATION
 # ===========================================================================
 
 def compute_beams(centers: SkyCoord, 
                   extension: float, 
-                  obs_times, frequencies, target_tracking, 
-                  n_grid: int = 50):
+                  obs_times, frequencies, 
+                  n_grid: int = 50,
+                  dt: float = 7200):
                   
     """Simulate the NenuFAR beam pattern projected on the sky.
 
@@ -75,9 +78,8 @@ def compute_beams(centers: SkyCoord,
     obs_times      : Time object    — array-like or list of array-like — observation times, either
                                       a single set shared across all centres, or one per centre.
     frequencies    : Quantity (MHz) — one or several beam frequencies. Number of frequencies = n_freq
-    target_tracking: object         — NenuFAR pointing/tracking object
     n_grid         : int            — number of grid points per axis (default 50)
-
+    dt             : float          — Duration of the observation sessions in sec (default 7200)
     Returns
     -------
     lons   : ndarray, shape (N, n_grid, n_grid)         — galactic longitude grids (deg)
@@ -93,7 +95,7 @@ def compute_beams(centers: SkyCoord,
         obs_times_list = [obs_times] * n_cent
     else:
         obs_times_list = obs_times
-    
+        
     conf = NenuFAR_Configuration(
         beamsquint_correction=True,
         beamsquint_frequency=50 * u.MHz,
@@ -103,6 +105,15 @@ def compute_beams(centers: SkyCoord,
     lons, lats, beams = [], [], []
 
     for center in centers:
+        # Source instanciation
+        targ = FixedTarget(center.icrs)
+        target_tracking = Pointing.target_tracking(
+              target=targ,
+              time=obs_times,
+              duration=TimeDelta(dt, format="sec")
+        )
+
+    
         lon, lat = np.meshgrid(
             np.linspace(center.galactic.l.value - extension,
                         center.galactic.l.value + extension, n_grid),
