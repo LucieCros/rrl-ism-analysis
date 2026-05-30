@@ -46,7 +46,94 @@ import astropy.units as u
 from scipy.signal import find_peaks, peak_widths, peak_prominences
 from scipy.optimize import curve_fit
 from tqdm import tqdm
+import dask.array as da
+import xarray as xr
 
+
+from nenupy.astro.sky import Sky
+from nenupy.instru import NenuFAR, NenuFAR_Configuration
+from nenupy.instru.nenufar import Polarization
+
+# ===========================================================================
+# NenuFAR BEAM SIMULATION
+# ===========================================================================
+
+def compute_beams(centers: SkyCoord, 
+                  extension: float, 
+                  obs_times, frequencies, target_tracking, 
+                  n_grid: int = 50):
+                  
+    """Simulate the NenuFAR beam pattern projected on the sky.
+
+    Computes the beam on a discrete sky grid centered on a given position,
+    averaged over polarisations (NW, NE) and time.
+
+    Parameters
+    ----------
+    center         : SkyCoord       — one or several pointing centre (galactic frame). Number of centers = n_cent
+    extension      : float          — half-angular size of the sky grid in deg
+    obs_times      : Time object    — array-like or list of array-like — observation times, either
+                                      a single set shared across all centres, or one per centre.
+    frequencies    : Quantity (MHz) — one or several beam frequencies. Number of frequencies = n_freq
+    target_tracking: object         — NenuFAR pointing/tracking object
+    n_grid         : int            — number of grid points per axis (default 50)
+
+    Returns
+    -------
+    lons   : ndarray, shape (N, n_grid, n_grid)         — galactic longitude grids (deg)
+    lats   : ndarray, shape (N, n_grid, n_grid)         — galactic latitude grids (deg)
+    beams  : ndarray, shape (N, n_freq, n_grid, n_grid) — beam amplitudes, averaged over polarisation and time
+    """
+    centers = SkyCoord(np.atleast_1d(centers))  # ensure iterable
+    n_cent  = len(centers)
+    n_freq = 1 if not isinstance(frequencies.value, (list,np.ndarray, tuple)) else len(frequencies)
+    
+    # If a single obs_times is provided, broadcast it to all centres
+    if not isinstance(obs_times, (list, np.ndarray, tuple)) or len(obs_times) != n_cent:
+        obs_times_list = [obs_times] * n_cent
+    else:
+        obs_times_list = obs_times
+    
+    conf = NenuFAR_Configuration(
+        beamsquint_correction=True,
+        beamsquint_frequency=50 * u.MHz,
+    )
+    array = NenuFAR()
+
+    lons, lats, beams = [], [], []
+
+    for center in centers:
+        lon, lat = np.meshgrid(
+            np.linspace(center.galactic.l.value - extension,
+                        center.galactic.l.value + extension, n_grid),
+            np.linspace(center.galactic.b.value - extension,
+                        center.galactic.b.value + extension, n_grid),
+        )
+
+        sky = Sky(
+            coordinates=SkyCoord(lon, lat, unit="deg", frame="galactic").ravel(),
+            time=obs_times,
+            frequency=frequencies,
+            polarization=np.array([Polarization.NW, Polarization.NE]),
+        )
+
+        beam = array.beam(sky=sky, pointing=target_tracking, configuration=conf)
+        beam_mean = da.mean(beam.value, axis=(0, 2))
+        beam_mean = beam_mean.reshape(n_freq, n_grid, n_grid)
+
+        beams.append(beam_mean)
+
+    return xr.DataArray(
+        da.stack(beams, axis=0),          # (n_cent, n_freq, n_grid, n_grid)
+        dims=["pointing", "frequency", "lat_idx", "lon_idx"],
+        attrs={
+            "center_l"  : [c.galactic.l.value for c in centers],   # deg
+            "center_b"  : [c.galactic.b.value for c in centers],   # deg
+            "extension" : extension,                         # deg
+            "n_grid"    : n_grid,
+            "frame"     : "galactic",
+        },
+    )
 # ===========================================================================
 # Dust extinction
 # ===========================================================================

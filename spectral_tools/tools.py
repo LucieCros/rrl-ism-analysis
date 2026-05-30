@@ -1022,7 +1022,7 @@ def cartesian_to_galactic(x, y, z, l0, b0):
     l = l0 + delta_l
     b = b0 + delta_b
     return l, b, r
- 
+
 # ---------------------------------------------------------------------------
 # Used to regroup elements based on a tolerance threshold
 # ---------------------------------------------------------------------------
