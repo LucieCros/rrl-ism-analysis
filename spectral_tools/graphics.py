@@ -738,18 +738,99 @@ def plot_dust_profile(ax: plt.Axes,
     ax.set_ylim(-0.1, 1.1)
     set_axes(ax, **set_axes_kwargs)
  
+def overlay_source(ax: plt.Axes,
+                   coord_source: SkyCoord,
+                   hasextent: bool = False,
+                   source_label: str = "Source",
+                   ## for point source
+                   source_marker: str = ".",
+                   source_color: str = "k",
+                   source_size: float = 1.5,
+                   ## for extended source
+                   facecolor: str = "w",
+                   edgecolor: str = "k",
+                   linewidth: float=1.5,
+                   width: float | None = None,
+                   height: float | None = None,
+                   angle: float | None = None,
+                   # beam
+                   beam_width: float | None = None,
+                   beam_lw: float = 1.) -> None:
+    """
+    Overlay a source (point or extended) on a Matplotlib Axes in Galactic coordinates.
+
+    Draws either a marker (point source) or an ellipse (extended source) at the
+    given sky position. Optionally overlays a dashed circle representing the beam.
+
+    Parameters
+    ----------
+    ax : plt.Axes
+        The Matplotlib Axes on which to draw.
+    coord_source : SkyCoord
+        Sky coordinates of the source. Internally converted to Galactic (l, b).
+    hasextent : bool, optional
+        If True, draw the source as an ellipse. If False (default), draw a marker.
+    source_label : str, optional
+        Label used in the legend. Default is ``"Source"``.
+
+    Point source parameters
+    -----------------------
+    source_marker : str, optional
+        Marker style passed to ``ax.plot`` as ``ls``. Default is ``"."``.
+    source_color : str, optional
+        Color of the point source marker. Default is ``"k"`` (black).
+    source_size : int or float, optional
+        Size of the point source marker, passed as ``lw``. Default is ``12``.
+
+    Extended source parameters
+    --------------------------
+    facecolor : str, optional
+        Face color of the ellipse patch. Default is ``"w"`` (white).
+    edgecolor : str, optional
+        Edge color of the ellipse patch. Default is ``"k"`` (black).
+    linewidth : float, optional
+        Line width of the ellipse edge. Default is ``1.5``.
+    width : float or None, optional
+        Full width of the ellipse in the units of the Axes. Required if ``hasextent=True``.
+    height : float or None, optional
+        Full height of the ellipse in the units of the Axes. Required if ``hasextent=True``.
+    angle : float or None, optional
+        Rotation angle of the ellipse in degrees (anti-clockwise).
+
+    Beam parameters
+    ---------------
+    beam_width : float or None, optional
+        If provided, draws a dashed circle of radius ``beam_width / 2`` centred on the
+        source, representing the instrument beam. Units must match the Axes.
+    beam_lw : float, optional
+        Line width of the beam circle. Default is ``1.0``.
+    """
+    if hasextent:
+        ax.add_patch(Ellipse((coord_source.galactic.l.value, coord_source.galactic.b.value),
+                     width = width, height = height, angle = angle,
+                     linewidth = linewidth, facecolor = facecolor, edgecolor = edgecolor))
+    else :
+        ax.plot(coord_source.galactic.l.value, coord_source.galactic.b.value, source_marker, 
+                c=source_color, lw=source_size, label=source_label)
+    if beam_width is not None :
+        ax.add_patch(Circle(
+                     xy=(coord_source.galactic.l.value, coord_source.galactic.b.value),
+                     radius=beam_width/2,
+                     fill=False,
+                     linestyle="--",
+                     edgecolor=source_color,
+                     linewidth=beam_lw,
+                     ))
+
  
 def overlay_positions(ax: plt.Axes,
-                      coord_source: SkyCoord,
                       coords_off: list[SkyCoord],
                       colors: list[str],
-                      source_label: str = "Source",
                       off_labels: list[str] | None = None,
-                      source_marker: str = ".",
                       off_marker: str = ".",
-                      source_ms: float = 12,
-                      off_ms: float = 10,
-                      beam_width: float | None = None) -> None:
+                      off_ms: float = 1.5,
+                      beam_width: float | None = None,
+                      beam_lw: float = 1.) -> None:
     """
     Overlay a primary source and a list of offset positions on a sky map.
  
@@ -761,24 +842,16 @@ def overlay_positions(ax: plt.Axes,
     ax : matplotlib.axes.Axes
         Target axes, assumed to have Galactic longitude on x and latitude
         on y (consistent with :func:`imshow` extent in Galactic frame).
-    coord_source : astropy.coordinates.SkyCoord
-        Primary source position.
     coords_off : list of astropy.coordinates.SkyCoord
         Offset positions, one per entry.
     colors : list of str
         Colours for each offset position.  Must have the same length as
         ``coords_off``.
-    source_label : str, optional
-        Legend label for the primary source.  Default ``'Source'``.
     off_labels : list of str or None, optional
         Legend labels for the offset positions.  If ``None``, labels are
         generated automatically as ``'off_1'``, ``'off_2'``, …
-    source_marker : str, optional
-        Matplotlib marker for the primary source.  Default ``'*'``.
     off_marker : str, optional
         Matplotlib marker for offset positions.  Default ``'.'``.
-    source_ms : float, optional
-        Marker size for the primary source.  Default 12.
     off_ms : float, optional
         Marker size for offset positions.  Default 10.
  
@@ -790,15 +863,15 @@ def overlay_positions(ax: plt.Axes,
     if off_labels is None:
         off_labels = [f"off_{i + 1}" for i in range(len(coords_off))]
  
-    ax.plot(coord_source.galactic.l.value,
-            coord_source.galactic.b.value,
-            marker=source_marker, c="black", ms=source_ms,
-            label=source_label, zorder=5)
+    #ax.plot(coord_source.galactic.l.value,
+    #        coord_source.galactic.b.value,
+    #        marker=source_marker, c="black", ms=source_ms,
+    #        label=source_label, zorder=5)
  
     for coord, col, lbl in zip(coords_off, colors, off_labels):
         ax.plot(coord.galactic.l.value,
                 coord.galactic.b.value,
-                marker=off_marker, c=col, ms=off_ms,
+                off_marker, c=col, lw=off_ms,
                 label=lbl, zorder=4)
         if beam_width is not None :
              ax.add_patch(Circle(
@@ -807,7 +880,7 @@ def overlay_positions(ax: plt.Axes,
                  fill=False,
                  linestyle="--",
                  edgecolor=col,
-                 linewidth=1,
+                 linewidth=beam_lw,
              ))
  
  
