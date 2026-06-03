@@ -1001,9 +1001,10 @@ class MapLoader:
         if tracer=="HI" :
             cube_vel[cube_vel<0.1*maximum] = np.nan
         elif tracer=="CO" :
-            cube_vel[cube_vel<1e-16] = np.nan
+            cube_vel[cube_vel<0.01*maximum] = np.nan
+            
         densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
-        mom1 = np.nanmean(cube_vel*vel_broad, axis = tuple(({0,1,2}-set(spatial_axes))))/densitymap * (densitymap/densitymap)
+        mom1 = np.nanmean(cube_vel*vel, axis = tuple(({0,1,2}-set(spatial_axes))))/densitymap * (densitymap/densitymap)
 
         return cube, vel, spectrum, lon_c, lat_c, mom0, mom1
 
