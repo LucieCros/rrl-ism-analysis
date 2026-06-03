@@ -40,12 +40,13 @@ Usage
 Dependencies
 ------------
 Internal: L1_class
-External: os
+External: os, astropy.io, numpy
 """
 
 import os
 from spectral_tools import L1_class as L1
-
+from astropy.io import fits
+import numpy as np
 
 # Default path to the RRL catalogue — override before calling if needed.
 DEFAULT_RRLS_PATH: str = os.path.join(os.path.dirname(__file__), "..", "files", "rrlines.csv")
@@ -298,3 +299,62 @@ def build_fits_header(template_path: str) -> "fits.Header":
                     pass
             hdr.set(key.strip(), value, comment.strip())
     return hdr
+    
+
+def freq_axis_from_fits(
+    hdu: fits.HDUList,
+    axis: int = 3,
+) -> np.ndarray:
+    """
+    Reconstruct a linear frequency axis from FITS WCS keywords.
+ 
+    Reads ``CRVAL``, ``CDELT``, ``CRPIX``, and ``NAXIS`` from the primary
+    HDU header and returns the corresponding frequency array.
+ 
+    This is equivalent to the manual four-line reconstruction used in the
+    stacking notebooks::
+ 
+        CRVAL = hdr['CRVAL3']
+        CDELT = hdr['CDELT3']
+        CRPIX = hdr['CRPIX3']
+        NAXIS = hdr['NAXIS3']
+        f = np.array([CRVAL + (i - CRPIX) * CDELT for i in range(NAXIS)])
+ 
+    Parameters
+    ----------
+    hdu : astropy.io.fits.HDUList
+        Opened FITS file (e.g. ``fits.open(path)``).
+    axis : int, optional
+        FITS axis number (1-based). Default is ``3`` (the spectral axis
+        in NenuFAR alltime cubes).
+ 
+    Returns
+    -------
+    np.ndarray
+        1-D frequency array in the same units as ``CRVAL``
+        (typically GHz for NenuFAR data).
+ 
+    Raises
+    ------
+    KeyError
+        If any of the required WCS keywords are missing from the header.
+ 
+    Examples
+    --------
+    >>> from astropy.io import fits
+    >>> from spectral_tools.io import freq_axis_from_fits
+    >>> hdu = fits.open("alltime_TAUA_CLOUDS_Calph_OFF.fits")
+    >>> f = freq_axis_from_fits(hdu)
+    >>> print(f"Frequency range: {f[0]:.3f} – {f[-1]:.3f} GHz")
+    """
+    hdr   = hdu[0].header
+    crval = hdr[f"CRVAL{axis}"]
+    cdelt = hdr[f"CDELT{axis}"]   # Hz (or GHz) per channel
+    crpix = hdr[f"CRPIX{axis}"]   # Reference pixel (1-based in FITS)
+    naxis = hdr[f"NAXIS{axis}"]   # Total number of channels
+ 
+    # Standard WCS linear transform: f[i] = CRVAL + (i - CRPIX) * CDELT
+    # numpy uses 0-based indices, so i runs from 0 to NAXIS-1.
+    return crval + (np.arange(naxis) - crpix) * cdelt
+ 
+

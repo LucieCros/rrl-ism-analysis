@@ -6,15 +6,14 @@ Matplotlib plotting utilities for RRL spectral data visualisation.
 
 This module provides:
 
-- :func:`set_axes`     : apply publication-quality tick styling to any Axes
-- :func:`plot_lines`   : draw vertical markers at RRL positions
-- :func:`color_fader`  : linearly interpolate between two colours
-- :func:`plot_overview`: 4-panel overview of a raw observation bloc
-- :func:`plot_subband` : 9-panel diagnostic plot of one sub-band reduction
+- :func: `set_style`        : apply the standard NenuFAR publication rcParams
+- :func:`set_axes`          : apply publication-quality tick styling to any Axes
+- :func:`plot_lines`        : draw vertical markers at RRL positions
+- :func:`color_fader`       : linearly interpolate between two colours
+- :func:`plot_overview`     : 4-panel overview of a raw observation bloc
+- :func:`plot_subband`      : 9-panel diagnostic plot of one sub-band reduction
+- :func:`plot_stack_mosaic` : mosaic of all stacked RRL spectra
 
-All functions follow a **non-interactive** pattern: figures are saved to
-disk and closed immediately. No ``plt.show()`` is called, making this
-module safe to use in pipeline scripts and batch jobs.
 
 Dependencies
 ------------
@@ -27,6 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator, LogLocator, NullFormatter
 from astropy.coordinates import SkyCoord
 from matplotlib.patches import Ellipse, Circle
+import matplotlib
 
 # ---------------------------------------------------------------------------
 # Colour palette
@@ -954,3 +954,153 @@ def annotate_spectral_peaks(ax: plt.Axes,
  
     return vel[cond][peak_idx]
  
+ 
+# ─────────────────────────────────────────────────────────────────────────────
+def plot_stack_mosaic(
+    stacks: np.ndarray,
+    quantum_intervals: np.ndarray,
+    freq_window: np.ndarray,
+    line_freq_fn,
+    rebin_fn,
+    set_axes_fn,
+    *,
+    rebin_factor: int = 4,
+    n_cols: int = 4,
+    tau_scale: float = 1e4,
+    xlim: tuple[float, float] = (-49, 49.0),
+    ylim: tuple[float, float] = (-7.0, 1.9),
+    figsize: tuple[float, float] = (10.0, 10.0),
+    label_line_series: str = r"C$\alpha$",
+    title: str = "",
+) -> tuple[matplotlib.figure.Figure, np.ndarray]:
+    """
+    Plot a mosaic of all stacked RRL spectra.
+ 
+    Each panel in the grid corresponds to one stacking interval
+    ``[quantum_intervals[k], quantum_intervals[k+1])``.  The spectrum
+    is first spectrally rebinned by *rebin_factor* for display, then
+    plotted in units of ``τ × tau_scale``.
+ 
+    Parameters
+    ----------
+    stacks : np.ndarray, shape (K, width)
+        Stacked spectra as returned by
+        :func:`~spectral_tools.stacking.weighted_stack`.
+    quantum_intervals : np.ndarray of int, shape (K+1,)
+        Interval boundaries as returned by
+        :func:`~spectral_tools.stacking.build_quantum_intervals`.
+    freq_window : np.ndarray, shape (width,)
+        Reference frequency axis centred on zero [Hz], as returned by
+        :func:`~spectral_tools.stacking.extract_weighted_lines`.
+    line_freq_fn : callable
+        Function with signature ``f0 = line_freq_fn(n) -> float`` that
+        returns the line frequency [GHz] for quantum number *n*.
+        Typically ``tools.line_freq``.
+    rebin_fn : callable
+        Function with signature
+        ``(spectrum_rebinned, xaxis_rebinned) = rebin_fn(spectrum, xaxis, factor)``
+        that rebins a spectrum.  Typically ``tools.rebinning``.
+    set_axes_fn : callable
+        Function with signature ``set_axes_fn(ax, pad=5)`` that applies
+        the standard axis style to a Matplotlib Axes.
+        Typically ``graphics.set_axes``.
+    rebin_factor : int, optional
+        Number of channels averaged per output bin.  Default ``4``.
+    n_cols : int, optional
+        Number of columns in the mosaic grid.  Default ``4``.
+    tau_scale : float, optional
+        Multiplicative scaling applied to the y-axis so the spectra are
+        displayed as ``τ × tau_scale``.  Default ``1e4``.
+    xlim : tuple of float, optional
+        Frequency axis limits [kHz].  Default ``(-49, 49)``.
+    ylim : tuple of float, optional
+        Optical-depth axis limits.  Default ``(-7, 1.9)``.
+    figsize : tuple of float, optional
+        Figure size in inches ``(width, height)``.  Default ``(10, 10)``.
+    label_line_series : str, optional
+        LaTeX string for the line-series label inside each panel.
+        Default ``r"C$\alpha$"``.
+    title : str, optional
+        Optional super-title placed above the mosaic.  Default ``""``.
+ 
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The mosaic figure.
+    ax_flat : np.ndarray of matplotlib.axes.Axes
+        1-D array of all axes (including hidden empty panels).
+ 
+    Examples
+    --------
+    >>> from spectral_tools.graphics_ext import plot_stack_mosaic
+    >>> import spectral_tools.tools    as tools
+    >>> import spectral_tools.graphics as graphics
+    >>>
+    >>> fig, axes = plot_stack_mosaic(
+    ...     stacks, quantum_intervals, freq_window,
+    ...     line_freq_fn=tools.line_freq,
+    ...     rebin_fn=tools.rebinning,
+    ...     set_axes_fn=graphics.set_axes,
+    ...     rebin_factor=4,
+    ...     title="TAUA_CLOUDS | Calph | OFF=True",
+    ... )
+    >>> fig.savefig("TAUA_CLOUDS_OFF-detections.pdf", bbox_inches="tight")
+    """
+    nstacks = len(quantum_intervals) - 1
+    n_rows  = np.ceil(nstacks // n_cols)
+ 
+    fig, axmosaic = plt.subplots(n_rows, n_cols, figsize=figsize)
+    ax_flat = axmosaic.flatten()
+ 
+    # x-axis in kHz (freq_window is in MHz)
+    xaxis_MHz = freq_window *1e3
+ 
+    for k in range(nstacks):
+        ax   = ax_flat[k]
+        N0_k = quantum_intervals[k]
+        N_k  = quantum_intervals[k + 1]
+ 
+        # Representative frequency: midpoint between the two boundary transitions
+        f0 = 0.5 * (line_freq_fn(N0_k) + line_freq_fn(N_k))
+ 
+        # Spectrally rebin for display
+        spectrum_rb, xaxis_rb = rebin_fn(stacks[k], xaxis_MHz, rebin_factor)
+ 
+        # ── Draw panel ─────────────────────────────────────────────────────
+        set_axes_fn(ax)
+        ax.plot(xaxis_rb, spectrum_rb * tau_scale, c="k", lw=1.2)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+ 
+        # Panel label: series name, mid-interval n, and representative frequency
+        n_mid  = 0.5 * (N0_k + N_k)
+        label  = f"{label_line_series}({n_mid:.0f})\n{f0:.2f}"
+        ax.text(
+            0.05, 0.05, label,
+            transform=ax.transAxes,
+            va="bottom", ha="left",
+            fontsize=9,
+        )
+ 
+        # ── Hide redundant tick labels ─────────────────────────────────────
+        if k % n_cols > 0:
+            ax.set_yticklabels([])
+        if k < (nstacks // n_cols - 1) * n_cols:
+            ax.set_xticklabels([])
+ 
+    # ── Hide unused panels in the last row ────────────────────────────────
+    for ax in ax_flat[nstacks:]:
+        ax.set_axis_off()
+ 
+    # ── Global labels and layout ──────────────────────────────────────────
+    tau_exp = int(round(np.log10(tau_scale)))
+    fig.supylabel(rf"$\tau \times 10^{{{-tau_exp}}}$")
+    fig.supxlabel(r"Doppler shift $f - f_{n+1 \to n}$ (kHz)")
+    if title:
+        fig.suptitle(title, fontsize=13, y=1.01)
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0, wspace=0)
+ 
+    return fig, ax_flat
+ 
+

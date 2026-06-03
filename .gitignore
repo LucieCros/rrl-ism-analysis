@@ -14,6 +14,7 @@
 # Raw observation FITS blocs
 data/raw/
 data/processed/
+data/alltimes/
 
 # Cleaned per-observation temp files
 */Calph/temp/
@@ -36,6 +37,7 @@ LOG_temp_*.txt
 # Pipeline outputs — figures, results, cached intermediates
 # =============================================================================
 
+stacks/
 outputs/
 results/
 figures/
