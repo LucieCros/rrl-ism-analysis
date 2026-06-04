@@ -480,10 +480,10 @@ def fit_stack(
         Default ``20.0`` km/s.
     og : float, optional
         Optical-depth gain factor.  Default ``1e4``.
-    amp_min_frac : float, optional
+    amp_lo : float, optional
         Lower bound on amplitude.
         Default 0.0
-    amp_max_frac : float, optional
+    amp_lo : float, optional
         Upper bound on amplitude.
         Default 1.0
         Initial guess is set to ``1 / og``.
@@ -533,11 +533,14 @@ def fit_stack(
     >>> popt, pcov = fit_stack(spec, freq, central_freq=47.0, velos=[0.0])
     """
     # ensure variable validity
-    if not isinstance(velos, Sequence):
+    if not isinstance(velos, (Sequence, np.ndarray)):
         velos = [velos]
     
     if regime not in ["Lorentz", "Doppler"]:
         raise ValueError(f"{regime} is not a valid value for regime. Supported inputs are: 'Lorentz' or 'Doppler'")
+    
+    # inversion in f to v conversion
+    velos = [-v for v in velos]
     
     n_comp = len(velos)
     n_pars = 4 * n_comp
@@ -572,8 +575,9 @@ def fit_stack(
     p0     = np.zeros(n_pars)
 
     for k, v0 in enumerate(velos):
-        dv = dvelos[k] if hasattr(dvelos, '__len__') else float(dvelos)
 
+        dv = dvelos[k] if hasattr(dvelos, '__len__') else float(dvelos)
+        
         # Centre
         bounds[0][4*k] = -v_to_f(v0 - dv, central_freq).value
         bounds[1][4*k] = -v_to_f(v0 + dv, central_freq).value
