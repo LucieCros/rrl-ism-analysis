@@ -446,7 +446,9 @@ def fit_stack(
         amp_lo: float = 0.0,
         amp_hi: float = 1.0,
         width_max_kms: float = 200.0,
+        width_min_kms_gw: float | None = None,   
         width_max_kms_gw: float | None = None,
+        width_min_kms_lw: float | None = None,   
         width_max_kms_lw: float | None = None,
         wing_fraction: float = 1 / 6,
         maxfev: int = 10000,
@@ -491,12 +493,12 @@ def fit_stack(
         Maximum allowed Lorentzian and Gaussian HWHM [km/s].
         Converted to MHz internally via ``v_to_f_fn``.
         Default ``200.0`` km/s.  Pass ``400.0`` for high-n stacks.
-    width_max_kms_gw : float, optional
-        Maximum allowed Gaussian FWHM [km/s].
+    width_max_kms_gw (resp min) : float, optional
+        Maximum (resp minimum) allowed Gaussian FWHM [km/s].
         Converted to MHz internally via ``v_to_f``.
         Default None.
-    width_max_kms_lw : float, optional
-        Maximum allowed Lorentzian FWHM [km/s].
+    width_max_kms_lw (resp min) : float, optional
+        Maximum (resp minimum) allowed Lorentzian FWHM [km/s].
         Converted to MHz internally via ``v_to_f``.
         Default None.
     wing_fraction : float, optional
@@ -560,6 +562,9 @@ def fit_stack(
     w_max_lw  = -v_to_f(width_max_kms, central_freq).value if (width_max_kms_lw is None) else -v_to_f(width_max_kms_lw, central_freq).value
     w_max_gw  = -v_to_f(width_max_kms, central_freq).value if (width_max_kms_gw is None) else -v_to_f(width_max_kms_gw, central_freq).value
     
+    w_min_lw = 0.0 if width_min_kms_lw is None else -v_to_f(width_min_kms_lw, central_freq).value
+    w_min_gw = 0.0 if width_min_kms_gw is None else -v_to_f(width_min_kms_gw, central_freq).value
+    
     match regime :
        case "Lorentz" :
            frac_gw = 1 / 4.0
@@ -589,14 +594,15 @@ def fit_stack(
         p0[4*k+1]        = amp_p0
 
         # lw and gw widths
-        for j in (2, 3): # width is always > 0
-            bounds[0][4*k+j] = 0.0
+        bounds[0][4*k+2] = min(w_min_lw, w_max_lw)
+        bounds[0][4*k+3] = min(w_min_gw, w_max_gw)
+        bounds[1][4*k+2] = max(w_min_lw, w_max_lw)
+        bounds[1][4*k+3] = max(w_min_gw, w_max_gw)
         
-        bounds[1][4*k+2] = w_max_lw
-        bounds[1][4*k+3] = w_max_gw
-        
-        p0[4*k+2] = w_p0lw
-        p0[4*k+3] = w_p0gw
+        condition = ((w_p0lw)> bounds[0][4*k+2]) & ((w_p0lw)> bounds[1][4*k+2])
+        p0[4*k+2] = w_p0lw if condition else 0.5 * (bounds[0][4*k+2] + bounds[1][4*k+2])
+        condition = ((w_p0gw)> bounds[0][4*k+3]) & ((w_p0gw)> bounds[1][4*k+3])
+        p0[4*k+3] = w_p0gw if condition else 0.5 * (bounds[0][4*k+3] + bounds[1][4*k+3])
 
     # ── Model closure: binds og so curve_fit signature stays (v, *params) ─
     def _model(v, *args):

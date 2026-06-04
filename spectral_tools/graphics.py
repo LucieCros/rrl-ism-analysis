@@ -1047,7 +1047,7 @@ def plot_stack_mosaic(
     >>> fig.savefig("TAUA_CLOUDS_OFF-detections.pdf", bbox_inches="tight")
     """
     nstacks = len(quantum_intervals) - 1
-    n_rows  = np.ceil(nstacks // n_cols)
+    n_rows  = int(np.ceil(nstacks / n_cols))
  
     fig, axmosaic = plt.subplots(n_rows, n_cols, figsize=figsize)
     ax_flat = axmosaic.flatten()
