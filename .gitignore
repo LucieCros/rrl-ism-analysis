@@ -41,6 +41,7 @@ stacks/
 outputs/
 results/
 figures/
+data/
 *.fits
 *.png
 *.pdf
