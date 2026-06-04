@@ -14,15 +14,9 @@ This module provides:
 All width parameters (``fwhm_L``, ``fwhm_G``) are in the same unit as the
 x-axis (typically km/s for velocity spectra, or MHz for frequency spectra).
 
-Removed from original version
-------------------------------
-- ``voigt_area_old`` and ``voigt_area_inv_old`` : superseded by
-  :func:`voigt_area` and :func:`voigt_area_inv`.
-- ``fwhm_fct`` lambda : duplicate of :func:`voigt_fwhm` with swapped argument
-  order — use :func:`voigt_fwhm` directly.
-- ``voigt_fwhm_LC`` : identical to :func:`voigt_fwhm`, removed.
-- ``triplevoigt`` and ``triplevoigt_ar`` : hardcoded 3-component wrappers —
-  use :func:`multiple_voigt` with a list of 3 components instead.
+- profile          — Sum of N Voigt components, scaled by OG (curve_fit model)
+- fit_stack        — Fit a profile on a single stacked spectrum
+
 
 References
 ----------
@@ -31,12 +25,16 @@ References
 
 Dependencies
 ------------
-astropy >= 5.0, numpy, scipy
+External: astropy >= 5.0, numpy, scipy, typing
+Local: spectral_tools.tools
 """
 
 import numpy as np
 from astropy.modeling.models import Voigt1D
 from scipy.optimize import curve_fit
+from typing import Callable, Sequence, Union
+
+from spectral_tools.tools import f_to_v, v_to_f
 
 
 # ---------------------------------------------------------------------------
@@ -391,8 +389,243 @@ def lorentz_amplitude_error(a_L: float, area: float, d_area: float,
 
 
 # ---------------------------------------------------------------------------
-# High-level fitter
+# Fitting functions
 # ---------------------------------------------------------------------------
+
+def profile(f: np.ndarray[float],
+          *args,
+           og: float = 1e4) -> np.ndarray:
+    """
+    Sum of N Voigt components, scaled by the optical-depth gain factor.
+
+    This is the model function passed to ``scipy.optimize.curve_fit``.
+    Parameters for all components are packed flat in ``args`` as groups of
+    four: ``[c0, a0, lw0, gw0,  c1, a1, lw1, gw1, …]``.
+
+    The returned value is ``−Σ voigt_i × og`` so that absorption lines
+    (negative optical depth) produce a positive residual for ``curve_fit``.
+
+    Parameters
+    ----------
+    f : np.ndarray
+        Frequency axis [MHz].
+    og : float, optional
+        Optical-depth gain factor applied to the sum.  Default ``1e4``.
+        This is used to help the 'curve_fit' function due to low performance with smaller values.
+        Use og=1. for unscaled voigt profiles.
+    *args : float
+        Flat sequence of Voigt parameters ``[c, a, lw, gw]`` per component.
+        ``len(args)`` must be a multiple of 4.
+    
+    Returns
+    -------
+    np.ndarray
+        ``−Σ voigt_i(v) × og``, same shape as ``v``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from spectral_tools.line_fitting import profile
+    >>> v = np.linspace(-0.01, 0.01, 500)
+    >>> y = multi_voigt(v, 0.0, 500.0, 1e-4, 5e-4, og=1e4)
+    """
+    total = np.zeros(len(f))
+    for k in range(len(args) // 4):
+        c0, a0, lw0, gw0 = args[4*k : 4*(k+1)]
+        total += voigt(f, c0, a0, lw0, gw0)
+    return -total * og
+
+    
+def fit_stack(
+        spectrum: np.ndarray,
+        freq_axis: np.ndarray,
+        central_freq: float,
+        velos: Union[float, Sequence[float]] = 0.,
+        dvelos: Union[float, Sequence[float]] = 20.0,
+        og: float = 1e4,
+        amp_lo: float = 0.0,
+        amp_hi: float = 1.0,
+        width_max_kms: float = 200.0,
+        width_max_kms_gw: float | None = None,
+        width_max_kms_lw: float | None = None,
+        wing_fraction: float = 1 / 6,
+        maxfev: int = 10000,
+        rms: bool = True,
+        blind_fit:bool = False,
+        regime: str = "Lorentz"
+        ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Fit a profile on a single (rebinned) stacked RRL spectrum.
+
+    The spectrum is assumed to contain absorption lines (negative optical
+    depth).  The model :func:`profile` returns ``−Σ voigt_i × og``,
+    which makes residuals positive for ``curve_fit``.
+
+    Parameters
+    ----------
+    spectrum : np.ndarray, shape (M,)
+        Rebinned stacked spectrum already multiplied by ``og``.
+    freq_axis : np.ndarray, shape (M,)
+        Frequency axis corresponding to ``spectrum`` [MHz].
+    central_freq : float
+        Representative line frequency for this stack interval [MHz].
+        Used to convert velocity guesses and width limits to frequency
+        offsets via ``v_to_f``.
+    velos : sequence of float
+        Initial velocity guess for each Voigt component [km/s].
+        Single-component fit: ``[0.0]``.
+    dvelos : float or sequence of float, optional
+        Half-search window around each velocity guess [km/s].
+        A scalar applies the same window to all components.
+        Default ``20.0`` km/s.
+    og : float, optional
+        Optical-depth gain factor.  Default ``1e4``.
+    amp_min_frac : float, optional
+        Lower bound on amplitude.
+        Default 0.0
+    amp_max_frac : float, optional
+        Upper bound on amplitude.
+        Default 1.0
+        Initial guess is set to ``1 / og``.
+    width_max_kms : float, optional
+        Maximum allowed Lorentzian and Gaussian HWHM [km/s].
+        Converted to MHz internally via ``v_to_f_fn``.
+        Default ``200.0`` km/s.  Pass ``400.0`` for high-n stacks.
+    width_max_kms_gw : float, optional
+        Maximum allowed Gaussian FWHM [km/s].
+        Converted to MHz internally via ``v_to_f``.
+        Default None.
+    width_max_kms_lw : float, optional
+        Maximum allowed Lorentzian FWHM [km/s].
+        Converted to MHz internally via ``v_to_f``.
+        Default None.
+    wing_fraction : float, optional
+        Fraction of the spectrum used as wings on each side to estimate
+        the noise level when ``rms=True``.  The central portion
+        ``[wing_fraction : 1 − wing_fraction]`` is masked.
+        Default ``1/6``  →  outer sixth on each side.
+    maxfev : int, optional
+        Maximum number of function evaluations for ``curve_fit``.
+        Default ``10000``.
+    rms : bool, optional
+        If ``True``, weight the fit by the inverse of the wing noise
+        (passes ``sigma=noise_std`` to ``curve_fit``).  Default ``True``.
+    blind_fit : bool, optional
+        If True, the fit is performed without bounds to the optimisation. 
+    regime : str, optional
+        Accepted values are "Lorentz" and "Doppler". If the regime is lorentzian -> w_L > w_D (and resp.)
+        Default "Lorentz".::
+
+    Returns
+    -------
+    popt : np.ndarray, shape (4 × N_comp,)
+        Fitted parameters ``[c0, a0, lw0, gw0,  c1, a1, lw1, gw1, …]``.
+        All-zeros array if ``curve_fit`` fails or returns NaN.
+    pcov : np.ndarray, shape (4 × N_comp, 4 × N_comp)
+        Parameter covariance matrix.  All-zeros on failure.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from spectral_tools.line_fitting import fit_stack
+    >>> freq = np.linspace(-0.01, 0.01, 250)
+    >>> spec = np.zeros(250)
+    >>> popt, pcov = fit_stack(spec, freq, central_freq=47.0, velos=[0.0])
+    """
+    # ensure variable validity
+    if not isinstance(velos, Sequence):
+        velos = [velos]
+    
+    if regime not in ["Lorentz", "Doppler"]:
+        raise ValueError(f"{regime} is not a valid value for regime. Supported inputs are: 'Lorentz' or 'Doppler'")
+    
+    n_comp = len(velos)
+    n_pars = 4 * n_comp
+    
+    # ── Noise from wings ──────────────────────────────────────────────────
+    n_pts = len(spectrum)
+    i_lo  = int(np.floor(n_pts * wing_fraction))
+    i_hi  = int(np.ceil(n_pts * (1.0 - wing_fraction)))
+    wings = spectrum.astype(float, copy=True)
+    wings[i_lo:i_hi] = np.nan
+    noise = float(np.nanstd(wings)) if rms else 1.0
+
+    # ── Amplitude bounds ──────────────────────────────────────────────────
+    amp_p0 = 1/og # og represents 1/magnitude of the dip (expected)
+
+    # ── Width bound in frequency ──────────────────────────────────────────
+    w_max_lw  = -v_to_f(width_max_kms, central_freq).value if (width_max_kms_lw is None) else -v_to_f(width_max_kms_lw, central_freq).value
+    w_max_gw  = -v_to_f(width_max_kms, central_freq).value if (width_max_kms_gw is None) else -v_to_f(width_max_kms_gw, central_freq).value
+    
+    match regime :
+       case "Lorentz" :
+           frac_gw = 1 / 4.0
+           frac_lw = 1 / 2.0
+       case "Doppler" :
+           frac_gw = 1 / 2.0
+           frac_lw = 1 / 4.0
+    
+    w_p0lw = -v_to_f(width_max_kms * frac_lw, central_freq).value if (width_max_kms_lw is None) else -v_to_f(width_max_kms_lw * frac_lw, central_freq).value
+    w_p0gw = -v_to_f(width_max_kms * frac_gw, central_freq).value if (width_max_kms_gw is None) else -v_to_f(width_max_kms_gw * frac_gw, central_freq).value
+    # ── Build p0 and bounds ───────────────────────────────────────────────
+    bounds = np.zeros((2, n_pars))
+    p0     = np.zeros(n_pars)
+
+    for k, v0 in enumerate(velos):
+        dv = dvelos[k] if hasattr(dvelos, '__len__') else float(dvelos)
+
+        # Centre
+        bounds[0][4*k] = -v_to_f(v0 - dv, central_freq).value
+        bounds[1][4*k] = -v_to_f(v0 + dv, central_freq).value
+        p0[4*k]        = -v_to_f(v0,       central_freq).value
+
+        # Amplitude
+        bounds[0][4*k+1] = amp_lo
+        bounds[1][4*k+1] = amp_hi
+        p0[4*k+1]        = amp_p0
+
+        # lw and gw widths
+        for j in (2, 3): # width is always > 0
+            bounds[0][4*k+j] = 0.0
+        
+        bounds[1][4*k+2] = w_max_lw
+        bounds[1][4*k+3] = w_max_gw
+        
+        p0[4*k+2] = w_p0lw
+        p0[4*k+3] = w_p0gw
+
+    # ── Model closure: binds og so curve_fit signature stays (v, *params) ─
+    def _model(v, *args):
+        return profile(v, *args, og=og)
+
+    # ── Fit ───────────────────────────────────────────────────────────────
+    try:
+    #if True :
+        if blind_fit :
+            popt, pcov = curve_fit(
+                _model, freq_axis, spectrum,
+                p0=p0, # bounds=bounds,
+                maxfev=maxfev, nan_policy='omit',
+               sigma=noise,
+            )
+        else :
+            popt, pcov = curve_fit(
+                _model, freq_axis, spectrum,
+                p0=p0, bounds=bounds,
+                maxfev=maxfev, nan_policy='omit',
+               sigma=noise,
+            )
+    except (RuntimeError, ValueError) as e:
+    #else:
+        print(e)
+        return np.zeros(n_pars), np.zeros((n_pars, n_pars))
+
+    if np.any(np.isnan(popt)):
+        print("No fit found")
+        return np.zeros(n_pars), np.zeros((n_pars, n_pars))
+
+    return popt, pcov 
+
 
 def fit_multi_voigt(v: np.ndarray, stack: np.ndarray,
                     velo_shift: list, turbu: list) -> tuple:

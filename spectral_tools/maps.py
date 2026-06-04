@@ -28,7 +28,7 @@ deleted, preventing memory leaks during long notebook sessions.
 
 Dependencies
 ------------
-numpy, scipy, tqdm, astropy
+numpy, scipy, tqdm, astropy, typing
 Optional: dustmaps (only required for :class:`DustMap`)
 
 References
@@ -40,6 +40,7 @@ References
 import os
 
 import numpy as np
+from typing import Callable, Sequence, Union
 from astropy.coordinates import SkyCoord
 from astropy.time import Time, TimeDelta
 from astropy.io import fits
@@ -62,7 +63,8 @@ from nenupy.astro.pointing import Pointing
 
 def compute_beams(centers: SkyCoord, 
                   extension: float, 
-                  obs_times, frequencies, 
+                  obs_times, 
+                  frequencies, 
                   n_grid: int = 50,
                   dt: float = 7200):
                   
@@ -91,7 +93,7 @@ def compute_beams(centers: SkyCoord,
     n_freq = 1 if not isinstance(frequencies.value, (list,np.ndarray, tuple)) else len(frequencies)
     
     # If a single obs_times is provided, broadcast it to all centres
-    if not isinstance(obs_times, (list, np.ndarray, tuple)) or len(obs_times) != n_cent:
+    if not isinstance(obs_times, Sequence) or len(obs_times) != n_cent:
         obs_times_list = [obs_times] * n_cent
     else:
         obs_times_list = obs_times
