@@ -13,21 +13,24 @@
 #
 # Quantum numbers are lists of integers. These should cover the range of
 # transitions detected in your stacked spectrum.
+#
+# Fine grids - if you want to refine the grid exploration 
+# based on the coarse results
 # ---------------------------------------------------------------------------
 
 coarse:
-  outdir: "grids"
-  quantum_numbers: [446, 486, 516, 536, 556, 576, 596, 616,
-                    636, 656, 676, 696, 716, 736, 771]
+  outdir: "grids/coarse_grids/"
+  quantum_numbers: [431, 441, 451, 461, 471, 481, 491, 501, 516, 536, 556, 576, 596,
+                    616, 636, 656, 676, 696, 716, 736, 761, 791]
   parameters:
     Te: [10,    500,  5]      # Electron temperature [K]
     Ne: [0.01,  0.1,  0.005]  # Electron density [cm^-3]
-    T0: [0,     5000, 100]    # Galactic background brightness temperature [K]
+    T0: [0,     5000, 100]    # Temperature of the local radiation field [K]
     L:  [0,     50,   1]      # Path length through the emitting region [pc]
     vt: [0,     30,   1]      # Non-thermal (turbulent) velocity [km/s]
 
 fine:
-  outdir: "finegrids_beam1"
+  outdir: "grids/fine_grids/"
   quantum_numbers: [527, 547, 567, 587, 607, 627, 647,
                     667, 687, 707, 727, 762]
   parameters:
