@@ -1103,4 +1103,75 @@ def plot_stack_mosaic(
  
     return fig, ax_flat
  
+ 
+# ---------------------------------------------------------------------------
+# Support functions for grid exploration visualisation
+# ---------------------------------------------------------------------------
+ 
+def plot_chi2_heatmap(ax, z, x, y, chi2_min, chi2_lim,
+                      threshold=1.15, cmap='viridis', ylim=None):
+    """
+    Display a χ² heatmap with a confidence contour.
+
+    Parameters
+    ----------
+    ax        : matplotlib Axes
+    z         : 2D array      — χ² values
+    x, y      : 1D arrays     — axis tick values
+    chi2_min  : float         — global χ² minimum
+    chi2_lim  : float         — colour scale ceiling
+    threshold : float         — relative threshold for the contour (default +15%)
+    cmap      : str           — matplotlib colormap
+    ylim      : tuple | None  — optional y-axis limits
+
+    Returns
+    -------
+    im : AxesImage  (for attaching a colorbar)
+    """
+    im = ax.imshow(
+        z, origin='lower', aspect='auto',
+        extent=[x[0], x[-1], y[0], y[-1]],
+        cmap=cmap, vmin=chi2_min, vmax=chi2_lim,
+    )
+    ax.contour(
+        z, origin='lower',
+        extent=[x[0], x[-1], y[0], y[-1]],
+        levels=[threshold * chi2_min], colors=['k'], linestyles=['dotted'],
+    )
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+    return im
+
+
+
+def plot_contours_by_param(ax, df, param_x, param_y, param_color,
+                           param_vals, chi2_min, threshold=1.15, cmap='jet'):
+    """
+    Draw one confidence contour per value of param_color, colour-coded.
+
+    Parameters
+    ----------
+    ax          : matplotlib Axes
+    df          : pd.DataFrame  — full χ² DataFrame
+    param_x/y   : str           — axes parameters (e.g. 'Ne', 'Te')
+    param_color : str           — parameter used for colour coding (e.g. 'L')
+    param_vals  : array-like    — unique values of param_color
+    chi2_min    : float
+    threshold   : float         — relative confidence level
+    cmap        : str
+    """
+    cmap_obj = plt.get_cmap(cmap, len(param_vals))
+    for i, val in enumerate(param_vals):
+        sub = df[df[param_color] == val].pivot_table(
+            index=param_y, columns=param_x, values='chi2', aggfunc='min'
+        )
+        if sub.empty:
+            continue
+        ax.contour(
+            sub.values, origin='lower',
+            extent=[sub.columns[0], sub.columns[-1],
+                    sub.index[0],   sub.index[-1]],
+            levels=[threshold * chi2_min],
+            colors=[cmap_obj(i)], linestyles=['dashed'],
+        )
 

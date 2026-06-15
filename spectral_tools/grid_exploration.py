@@ -331,6 +331,29 @@ def _make_heatmap_axes(fig) -> dict:
     )
 
 
+def make_masked_heatmap(df_subset, x_cols, y_idx, cond):
+    """
+    Pivot a χ² DataFrame subset into a (Te, L) heatmap, re-index onto
+    the full grid, and apply a boolean exclusion mask (masked → NaN).
+
+    Parameters
+    ----------
+    df_subset : pd.DataFrame
+    x_cols    : array-like   — full L axis (columns)
+    y_idx     : array-like   — full Te axis (index)
+    cond      : np.ndarray   — True where values should be excluded
+
+    Returns
+    -------
+    np.ndarray
+    """
+    hm = df_subset.pivot_table(
+        index='Te', columns='L', values='chi2', aggfunc='min'
+    ).reindex(columns=x_cols, index=y_idx)
+    vals = hm.values.copy()
+    vals[cond] = np.nan
+    return vals
+
 # ---------------------------------------------------------------------------
 # Chi² projection plots
 # ---------------------------------------------------------------------------
