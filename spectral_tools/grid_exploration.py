@@ -88,9 +88,7 @@ N_OBS_PER_TRANSITION: int = 2
 # ---------------------------------------------------------------------------
 
 def load_observations(csv_file: str,
-                      n_subset=None,
-                      oldvals: bool = False,
-                      tau: bool = True) -> tuple:
+                      n_subset=None) -> tuple:
     """
     Load and prepare fitted line parameters from a CSV observation file.
 
@@ -131,7 +129,7 @@ def load_observations(csv_file: str,
     """
     import astropy.units as u
 
-    index_col = 1 if (oldvals or tau) else 0
+    index_col = 0
     df = pd.read_csv(csv_file, index_col=index_col)
 
     if n_subset is not None:
@@ -143,14 +141,6 @@ def load_observations(csv_file: str,
     obs_area    = df["Ifit"].values
     obs_darea   = df["dIfit"].values
 
-    if oldvals:
-        # Convert km/s → Hz using the central frequency of each transition
-        f0 = line_freq(obs_n)
-        obs_deltaf  = -v_to_f(obs_deltaf  * (u.km / u.s), f0).to(u.Hz).value
-        obs_ddeltaf = -v_to_f(obs_ddeltaf * (u.km / u.s), f0).to(u.Hz).value
-        obs_area    =  v_to_f(obs_area    * (u.km / u.s), f0).to(u.Hz).value
-        obs_darea   = -v_to_f(obs_darea   * (u.km / u.s), f0).to(u.Hz).value
-
     return obs_n, obs_deltaf, obs_ddeltaf, obs_area, obs_darea
 
 
@@ -159,8 +149,7 @@ def load_observations(csv_file: str,
 # ---------------------------------------------------------------------------
 
 def compute_chi2_split(path_xrs: str, filepattern: str, csv_file: str,
-                       n_subset=None, oldvals: bool = False,
-                       tau: bool = True) -> xr.DataArray:
+                       n_subset=None) -> xr.DataArray:
     """
     Compute the reduced chi² between a parameter-space grid and observations.
 
@@ -202,7 +191,7 @@ def compute_chi2_split(path_xrs: str, filepattern: str, csv_file: str,
         Reduced chi² grid, dimensions (Te, Ne, T0, L, vt).
     """
     obs_n, obs_deltaf, obs_ddeltaf, obs_area, obs_darea = load_observations(
-        csv_file, n_subset, oldvals, tau
+        csv_file, n_subset
     )
 
     chi2_accum       = None

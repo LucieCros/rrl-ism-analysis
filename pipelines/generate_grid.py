@@ -88,7 +88,7 @@ warnings.filterwarnings("ignore")
 # Default paths
 # ---------------------------------------------------------------------------
 
-DEFAULT_CONFIG: str = "files/grid_config.yaml"
+DEFAULT_CONFIG: str = "../files/grid_config.yaml"
 ALPHA: float        = -2.6
 
 
@@ -195,7 +195,7 @@ def bnbetan_block(n_block: np.ndarray, Te: np.ndarray,
 # Vectorised total broadening (grid-optimised)
 # ---------------------------------------------------------------------------
 
-def total_broadening_grid(n_g, Ne, Te, somme_inf, T0, vt,
+def total_broadening_grid(n_g, Ne, Te, T0, vt,
                            nu0_arr, logn_arr, n2_arr,
                            n_offset, alpha=ALPHA) -> np.ndarray:
     """
@@ -214,8 +214,6 @@ def total_broadening_grid(n_g, Ne, Te, somme_inf, T0, vt,
         Quantum numbers broadcast over the grid axes.
     Ne, Te, T0, vt : numpy.ndarray
         Physical parameter grids, shape (1, nTe, nNe, nT0, nL, nvt).
-    somme_inf : float
-        Pre-computed harmonic sum for radiation broadening.
     nu0_arr : numpy.ndarray
         Central frequencies for each n in the block [MHz].
     logn_arr : numpy.ndarray
@@ -236,7 +234,7 @@ def total_broadening_grid(n_g, Ne, Te, somme_inf, T0, vt,
     nu0_g = nu0_arr[idx, None, None, None, None, None]
 
     # Gaussian (Doppler) broadening
-    dG = doppler_broadening(n_g, Te, vt, nu0_g)
+    dG = doppler_broadening(n_g, Te, vt)
 
     # Natural broadening (Lorentzian component)
     dL_nat = (1.2e-6
@@ -246,7 +244,7 @@ def total_broadening_grid(n_g, Ne, Te, somme_inf, T0, vt,
 
     # Total Lorentzian: pressure + radiation + natural
     dL = (pressure_broadening(n_g, Ne, Te)
-          + radiation_broadening(n_g, T0, somme_inf, nu0_g, alpha)
+          + radiation_broadening(n_g, T0, alpha)
           + dL_nat)
 
     # Thompson (1987) Voigt FWHM approximation
@@ -343,7 +341,7 @@ def main() -> None:
         deltaf_block = total_broadening_grid(
             n_g,
             Ne=Ne_g2, Te=Te_g2, T0=T0_g2, vt=vt_g2,
-            somme_inf=SOMME_INF,
+            #somme_inf=SOMME_INF,
             nu0_arr=nu0_arr, logn_arr=logn_arr, n2_arr=n2_arr,
             n_offset=int(n_block[0]),
             alpha=ALPHA,
