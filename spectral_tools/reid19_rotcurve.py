@@ -1,3 +1,23 @@
+# -*- coding: utf-8 -*-
+"""
+reid19_rotcurve.py
+==================
+LSR velocity model based on the Reid et al. (2019) Galactic rotation curve.
+
+Computes the expected LSR velocity ``v_LSR(l, b, d)`` for any line of sight
+using the A5 rotation model parameters from Reid et al. (2019). Used by
+notebooks and pipelines to convert spectral peaks to heliocentric distances.
+
+References
+----------
+Reid et al. (2019), ApJ, 885, 131.
+
+Dependencies
+------------
+numpy
+Standard library: os, pickle
+Internal: spectral_tools.kd_utils
+"""
 
 import os
 import pickle

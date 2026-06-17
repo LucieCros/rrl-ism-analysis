@@ -21,8 +21,10 @@ spectral_tools/           Core library (importable package)
 ├── line_fitting.py       Voigt profile fitting, uncertainty propagation
 ├── modeling.py           Physical CRRL broadening and area modeling
 ├── graphics.py           Matplotlib plotting utilities
-├── maps.py               Dust extinction (Edenhofer 2023) and CO/HI cube handling
-└── grid_exploration.py   Chi² grid exploration and parameter visualisation
+├── maps.py               Dust extinction (Edenhofer 2023), CO/HI cube handling, beam computation
+├── grid_exploration.py   Chi² grid exploration and parameter visualisation
+├── kd_utils.py           Galactic kinematic distance utilities (Reid+2019)
+└── reid19_rotcurve.py    LSR velocity model (Reid et al. 2019 rotation curve)
 
 pipelines/                Executable scripts
 ├── run_cleaning.py       Batch launcher for spectral cleaning
@@ -193,14 +195,17 @@ tracers (3D dust extinction, CO line emission, HI emission) in order to
 define the velocity components to be modelled with the CRRLs.
 
 **Module dependencies:**
-- `spectral_tools.maps` (`MapLoader`) — loading and aperture-cropping of
-  CO/HI data cubes and the Edenhofer et al. (2023) extinction map
-- `astropy.coordinates`, `astropy.units`
+- `spectral_tools.maps` — dust map queries (`DustMap`), PPV cube loading (`MapLoader`), beam computation
+- `spectral_tools.tools` — coordinate conversions (`galactic_to_cartesian`, `cartesian_to_galactic`)
+- `spectral_tools.graphics` — axis styling helpers
+- `spectral_tools.reid19_rotcurve` — LSR velocity model for iso-velocity surfaces
+- `nenupy` — NenuFAR beam simulation and angular resolution
+- `astropy`, `numpy`, `scipy`, `pandas`, `dask`, `xarray`, `matplotlib`, `plotly`, `kaleido`, `scikit-image`
 
 **Data dependencies:**
-- CO data cube (external, not tracked)
-- HI data cube (external, not tracked)
-- Edenhofer et al. (2023) 3D dust extinction map (external, not tracked)
+- CO and HI PPV cubes (FITS, external, not tracked)
+- Edenhofer et al. (2023) 3D dust extinction map (fetched via `maps.DustMap`)
+- NenuFAR observation log (CSV)
 - `files/source_info.txt` — source coordinates and systemic velocity
 
 ---
@@ -292,15 +297,17 @@ Generates chi-squared projection maps and identifies the best-fit region.
 atoms.py          (no internal imports)
     ↑
 tools.py          (imports atoms)
+    ↑             ↑
+L1_class.py       line_fitting.py   (imports tools)
+    ↑             ↑
+io.py             modeling.py       (imports atoms, tools, line_fitting)
     ↑
-L1_class.py       (imports tools)
+kd_utils.py       (no internal imports)
     ↑
-io.py             (imports L1_class)
-    ↑
-modeling.py       (imports atoms, tools)
-line_fitting.py   (no internal imports)
+reid19_rotcurve.py (imports kd_utils)
+
 graphics.py       (no internal imports)
-maps.py           (no internal imports)
+maps.py           (no internal imports — uses nenupy, dustmaps externally)
 grid_exploration  (imports atoms, tools)
 ```
 

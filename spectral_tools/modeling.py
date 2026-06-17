@@ -29,7 +29,7 @@ should import from this module instead.
 Dependencies
 ------------
 astropy (constants only), numpy, scipy, pickle
-Internal: spectral_tools.atoms, spectral_tools.fitfunc
+Internal: spectral_tools.atoms, spectral_tools.line_fitting, spectral_tools.tools
 
 External data files (loaded at import time)
 -------------------------------------------

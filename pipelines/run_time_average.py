@@ -51,9 +51,9 @@ The output filename follows the convention::
 Dependencies
 ------------
 Standard library: argparse, os, time, warnings
-Third-party: numpy, astropy, tqdm
+Third-party: numpy, astropy (fits, units), tqdm
 Internal: spectral_tools.tools (doppler_corrections, doppler_correction,
-          get_linefree)
+          get_linefree), spectral_tools.io
 """
 
 import argparse

@@ -28,7 +28,8 @@ deleted, preventing memory leaks during long notebook sessions.
 
 Dependencies
 ------------
-numpy, scipy, tqdm, astropy, typing
+numpy, scipy, tqdm, astropy, typing, dask, xarray
+nenupy (beam simulation — :func:`compute_beams`)
 Optional: dustmaps (only required for :class:`DustMap`)
 
 References

@@ -1,3 +1,19 @@
+# -*- coding: utf-8 -*-
+"""
+kd_utils.py
+===========
+Galactic kinematic distance utilities based on the Reid et al. (2019) rotation model.
+
+Provides low-level functions for converting heliocentric (l, b, d) coordinates
+to Galactocentric radius, Galactic Cartesian coordinates, and LSR velocity.
+Used internally by :mod:`spectral_tools.reid19_rotcurve`.
+
+Dependencies
+------------
+numpy
+Standard library: os
+"""
+
 import os
 import numpy as np
 

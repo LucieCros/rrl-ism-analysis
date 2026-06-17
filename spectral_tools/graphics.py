@@ -17,7 +17,7 @@ This module provides:
 
 Dependencies
 ------------
-matplotlib >= 3.5, numpy
+matplotlib >= 3.5, numpy, astropy
 """
 
 import numpy as np

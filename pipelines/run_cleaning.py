@@ -40,7 +40,7 @@ Dependencies
 ------------
 Standard library: sys, os, subprocess, time, argparse, warnings
 Third-party: tqdm
-Internal: none (launches subprocesses that import spectral_tools)
+Internal: spectral_tools.io (read_source_info)
 """
 
 import argparse
