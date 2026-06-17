@@ -762,14 +762,15 @@ class MapLoader:
         elif tracer=="CO" :
             c[c<1e-16] = np.nan
 
-        spatial_axes = [0, 1, 2]
-        spatial_axes.remove(2 * vdim % 3)
-
         vel = self._get_velocity(hdu, tracer)
 
+        vel_axis = c.shape.index(len(vel))
         vel_shape = [1, 1, 1]
-        vel_shape[vdim] = len(vel)
+        vel_shape[vel_axis] = len(vel)
         vel_broad = vel.reshape(vel_shape)
+
+        spatial_axes = [0, 1, 2]
+        spatial_axes.remove(vel_axis)
 
         m = np.nanmean(c*vel_broad, axis = tuple(({0,1,2}-set(spatial_axes))))/np.nanmean(c, axis = tuple(({0,1,2}-set(spatial_axes))))
         return np.where(np.isfinite(m), m, np.nan)
@@ -995,23 +996,24 @@ class MapLoader:
         else:
             cube_vel[~vel_mask, :, :] = np.nan   # HI: (vel, lat, lon)
 
+        vel_axis = cube_vel.shape.index(len(vel))
         vel_shape = [1, 1, 1]
-        vel_shape[vdim] = len(vel)
+        vel_shape[vel_axis] = len(vel)
         vel_broad = vel.reshape(vel_shape)
 
         spatial_axes = [0, 1, 2]
-        spatial_axes.remove(2 * vdim % 3)
-        
+        spatial_axes.remove(vel_axis)
+
         densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
         mom0 = densitymap * (densitymap/densitymap)
-        
+
         # Tracer specific cutoff
         maximum = np.nanmax(cube_vel)
         if tracer=="HI" :
             cube_vel[cube_vel<0.1*maximum] = np.nan
         elif tracer=="CO" :
             cube_vel[cube_vel<0.01*maximum] = np.nan
-            
+
         densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
         mom1 = np.nanmean(cube_vel*vel_broad, axis = tuple(({0,1,2}-set(spatial_axes))))/densitymap * (densitymap/densitymap)
 
