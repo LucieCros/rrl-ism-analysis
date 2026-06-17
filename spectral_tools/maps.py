@@ -991,7 +991,10 @@ class MapLoader:
             cube_vel[:,:,~vel_mask] = np.nan   # zero out outside range — CO: (lat,lon,vel)
         else:
             cube_vel[~vel_mask, :, :] = np.nan   # HI: (vel, lat, lon)
-            vel_broad = vel[:,np.newaxis,np.newaxis] # broadcast before operation
+
+        vel_shape = [1, 1, 1]
+        vel_shape[vdim] = len(vel)
+        vel_broad = vel.reshape(vel_shape)
 
         spatial_axes = [0, 1, 2]
         spatial_axes.remove(2 * vdim % 3)
@@ -1007,7 +1010,7 @@ class MapLoader:
             cube_vel[cube_vel<0.01*maximum] = np.nan
             
         densitymap = np.nanmean(cube_vel, axis=tuple(({0,1,2}-set(spatial_axes))))
-        mom1 = np.nanmean(cube_vel*vel, axis = tuple(({0,1,2}-set(spatial_axes))))/densitymap * (densitymap/densitymap)
+        mom1 = np.nanmean(cube_vel*vel_broad, axis = tuple(({0,1,2}-set(spatial_axes))))/densitymap * (densitymap/densitymap)
 
         return cube, vel, spectrum, lon_c, lat_c, mom0, mom1
 
