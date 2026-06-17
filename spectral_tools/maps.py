@@ -749,26 +749,29 @@ class MapLoader:
         m = np.nanmean(c, axis=tuple(({0,1,2}-set(spatial_axes))))
         return np.where(np.isfinite(m), m, np.nan)
         
-    @staticmethod
-    def moment1(cube: np.ndarray, tracer: str, cutoff: float = 0.0) -> np.ndarray:
+    def moment1(self, cube: np.ndarray, tracer: str, cutoff: float = 0.0) -> np.ndarray:
         vdim = self._VDIM[tracer]
-        
+
         c = np.copy(cube).astype(float)
         maximum = np.nanmax(c)
         c[c < cutoff] = np.nan
         # Tracer specific cutoff
-        
+
         if tracer=="HI" :
             c[c<0.1*maximum] = np.nan
         elif tracer=="CO" :
             c[c<1e-16] = np.nan
-        
+
         spatial_axes = [0, 1, 2]
         spatial_axes.remove(2 * vdim % 3)
-        
+
         vel = self._get_velocity(hdu, tracer)
-        
-        m = np.nanmean(c*vel, axis = tuple(({0,1,2}-set(spatial_axes))))/np.nanmean(c, axis = tuple(({0,1,2}-set(spatial_axes))))
+
+        vel_shape = [1, 1, 1]
+        vel_shape[vdim] = len(vel)
+        vel_broad = vel.reshape(vel_shape)
+
+        m = np.nanmean(c*vel_broad, axis = tuple(({0,1,2}-set(spatial_axes))))/np.nanmean(c, axis = tuple(({0,1,2}-set(spatial_axes))))
         return np.where(np.isfinite(m), m, np.nan)
     # -----------------------------------------------------------------------
     # Cube cropping
