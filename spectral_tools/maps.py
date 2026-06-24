@@ -210,7 +210,7 @@ class DustMap:
                        delta: float,
                        r_min: float = 0.03,
                        r_max: float = 2.0,
-                       dr: float = 0.01) -> np.ndarray:
+                       dr: float = 0.01) -> tuple:
         """
         Compute the cumulative dust extinction integrated over distance,
         on a regular spatial grid covering the field of view.
@@ -234,6 +234,8 @@ class DustMap:
         -------
         numpy.ndarray, shape (n_l, n_b)
             Cumulative extinction map (sum over all distance shells).
+        tuple
+            Spatial extension of the computed dust fov.
         """
         Dl, Db   = fov
         l_center = coord.galactic.l
@@ -244,7 +246,7 @@ class DustMap:
         longitudes = np.linspace(l_center - Dl / 2, l_center + Dl / 2, nl)
         latitudes  = np.linspace(b_center - Db / 2, b_center + Db / 2, nb)
         l_grid, b_grid = np.meshgrid(longitudes, latitudes)
-
+	
         radii  = np.arange(r_min, r_max, dr) * u.kpc
         extinc = np.zeros((nl, nb))
 
@@ -253,8 +255,9 @@ class DustMap:
             shell      = self._query.query(los)
             shell      = np.where(np.isnan(shell), 0.0, shell)
             extinc    += shell
+        extent = (l_center - Dl / 2, l_center + Dl / 2, b_center - Db / 2, b_center + Db / 2)
 
-        return extinc
+        return extinc, extent
 
     def extinction_los(self, coord: SkyCoord,
                        fov: tuple,
