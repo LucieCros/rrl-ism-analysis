@@ -35,9 +35,12 @@ External data files (loaded at import time)
 -------------------------------------------
 ``../files/B1B2.pickle``
     Pre-computed bn·βn interpolators, dict ``{str(n): (f1, f2)}``.
-``../files/alphagamma.pickle``
-    Pre-computed collisional broadening interpolators
-    ``(alpha_f, grad_alpha_f, gamma_f, grad_gamma_f)``.
+``../files/alphagamma.npz``
+    Raw breakpoints/coefficients for the collisional broadening
+    interpolators α(Te), γ(Te), rebuilt at import time as ``PPoly``
+    (see ``pipelines/migrate_alphagamma_pickle.py``). Stored as plain
+    arrays rather than a pickled ``scipy`` object so it is immune to
+    scipy's internal pickle-format changes across versions.
 
 References
 ----------
@@ -54,7 +57,7 @@ import numpy as np
 from astropy.constants import k_B, c
 from astropy.constants import u as amu
 from astropy.modeling.models import Voigt1D
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, PPoly
 
 from spectral_tools.atoms import line_freq
 from spectral_tools import line_fitting
@@ -92,7 +95,7 @@ def _load_interpolators(path: str) -> tuple:
     Parameters
     ----------
     path : str
-        Directory containing ``B1B2.pickle`` and ``alphagamma.pickle``.
+        Directory containing ``B1B2.pickle`` and ``alphagamma.npz``.
 
     Returns
     -------
@@ -105,8 +108,16 @@ def _load_interpolators(path: str) -> tuple:
     """
     with open(os.path.join(path, "B1B2.pickle"), "rb") as fh:
         FUNCB1B2 = pickle.load(fh)
-    with open(os.path.join(path, "alphagamma.pickle"), "rb") as fh:
-        alpha_f, _grad_alpha_f, gamma_f, _grad_gamma_f = pickle.load(fh)
+
+    agdata = np.load(os.path.join(path, "alphagamma.npz"))
+    alpha_f = PPoly(
+        agdata["alpha_c"], agdata["alpha_x"],
+        extrapolate=bool(agdata["alpha_extrapolate"]), axis=int(agdata["alpha_axis"]),
+    )
+    gamma_f = PPoly(
+        agdata["gamma_c"], agdata["gamma_x"],
+        extrapolate=bool(agdata["gamma_extrapolate"]), axis=int(agdata["gamma_axis"]),
+    )
     return FUNCB1B2, alpha_f, gamma_f
 
 

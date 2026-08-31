@@ -27,6 +27,7 @@ from matplotlib.ticker import AutoMinorLocator, LogLocator, NullFormatter
 from astropy.coordinates import SkyCoord
 from matplotlib.patches import Ellipse, Circle
 import matplotlib
+from spectral_tools import tools
 
 # ---------------------------------------------------------------------------
 # Colour palette
@@ -115,7 +116,8 @@ def set_style(font_size: float = 15,
 
     mpl.rcParams["axes.linewidth"]   = axes_linewidth
     mpl.rcParams["lines.linewidth"]  = lines_linewidth
-
+    
+    
     for axis in ("xtick", "ytick"):
         mpl.rcParams[f"{axis}.direction"]   = "in"
         mpl.rcParams[f"{axis}.labelsize"]   = label_size
@@ -964,6 +966,7 @@ def plot_stack_mosaic(
     rebin_fn,
     set_axes_fn,
     *,
+    velo_axis: bool = False,
     rebin_factor: int = 4,
     n_cols: int = 4,
     tau_scale: float = 1e4,
@@ -1065,10 +1068,14 @@ def plot_stack_mosaic(
  
         # Spectrally rebin for display
         spectrum_rb, xaxis_rb = rebin_fn(stacks[k], xaxis_MHz, rebin_factor)
+
+        if velo_axis :
+            xaxis_rb_velo = tools.f_to_v(xaxis_rb /1e3, f0).value / 1e3 # convert to km/s
+            xaxis_rb = xaxis_rb_velo
  
         # ── Draw panel ─────────────────────────────────────────────────────
         set_axes_fn(ax)
-        ax.plot(xaxis_rb, spectrum_rb * tau_scale, c="k", lw=1.2)
+        ax.step(xaxis_rb, spectrum_rb * tau_scale, c="k", lw=1.2)
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
  
@@ -1095,7 +1102,11 @@ def plot_stack_mosaic(
     # ── Global labels and layout ──────────────────────────────────────────
     tau_exp = int(round(np.log10(tau_scale)))
     fig.supylabel(rf"$\tau \times 10^{{{-tau_exp}}}$")
-    fig.supxlabel(r"Doppler shift $f - f_{n+1 \to n}$ (kHz)")
+    if velo_axis :
+        fig.supxlabel(r"Doppler shift (km/s)")
+    else :
+        fig.supxlabel(r"Doppler shift $f - f_{n+1 \to n}$ (kHz)")
+    
     if title:
         fig.suptitle(title, fontsize=13, y=1.01)
     fig.tight_layout()

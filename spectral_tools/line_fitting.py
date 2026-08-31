@@ -224,8 +224,8 @@ def voigt_area(peak: float, fwhm_G: float, fwhm_L: float) -> float:
     Returns
     -------
     float
-        Integrated area, in units of ``peak × fwhm_G`` (e.g. km/s if both
-        peak and widths are expressed in those units).
+        Integrated area, in units of ``fwhm_L`` and ``fwhm_G`` (e.g. km/s if both
+        widths are expressed in those units).
 
     .. warning::
         Argument order is **(peak, fwhm_G, fwhm_L)** — consistent with
@@ -386,6 +386,64 @@ def lorentz_amplitude_error(a_L: float, area: float, d_area: float,
       + (a_L / fwhm_V)**2 * d_fwhm_V**2
     )
     return np.sqrt(Da2)
+
+
+def area_error(method: str, area: float, *,
+                d_fwhm_V: float = None, fwhm_V: float = None,
+                residual: np.ndarray = None, spectrum: np.ndarray = None,
+                peak: float = None, d_peak: float = None,
+                fwhm_G: float = None, d_fwhm_G: float = None,
+                fwhm_L: float = None, d_fwhm_L: float = None) -> float:
+    """
+    Estimate the uncertainty on an integrated line area (``dIfit``).
+
+    Three interchangeable methods are supported, selected via ``method``:
+
+    - ``"width"`` : scale ``area`` by the relative uncertainty on the total
+      Voigt FWHM. Requires ``d_fwhm_V``, ``fwhm_V``.
+    - ``"residual"`` : scale ``area`` by the fraction of the spectrum left
+      unexplained by the fit, ``sum(|residual|) / sum(|spectrum|)``.
+      Requires ``residual``, ``spectrum``.
+    - ``"composite"`` : quadrature sum of the relative uncertainties on the
+      three fit parameters that determine the area — amplitude and both
+      widths — as extracted from the fit covariance matrix. Requires
+      ``L_peak``, ``d_L_peak``, ``fwhm_G``, ``d_fwhm_G``, ``fwhm_L``, ``d_fwhm_L``.
+
+    Parameters
+    ----------
+    method : {"width", "residual", "composite"}
+        Which estimator to use.
+    area : float
+        Fitted line area (``Ifit``), used as the scale for all methods.
+    d_fwhm_V, fwhm_V : float, optional
+        Voigt FWHM and its uncertainty — for ``method="width"``.
+    residual, spectrum : numpy.ndarray, optional
+        Fit residual and the (rebinned) spectrum it was fit against — for
+        ``method="residual"``.
+    L_peak, d_L_peak, fwhm_G, d_fwhm_G, fwhm_L, d_fwhm_L : float, optional
+        Fitted amplitude and widths with their uncertainties (from
+        ``pcov``) — for ``method="composite"``.
+
+    Returns
+    -------
+    float
+        Uncertainty on ``area``.
+    """
+    if method not in ("width", "residual", "composite"):
+        raise ValueError(f"{method} is not a valid value for method. "
+                          "Supported inputs are: 'width', 'residual', 'composite'")
+
+    if method == "width":
+        return area * (d_fwhm_V / fwhm_V) if fwhm_V else 0.0
+
+    if method == "residual":
+        denom = np.nansum(np.abs(spectrum))
+        return area * (np.nansum(np.abs(residual)) / denom) if denom else 0.0
+
+    # method == "composite"
+    return area * np.sqrt((d_peak  / peak)**2
+                         + (d_fwhm_G / fwhm_G)**2
+                         + (d_fwhm_L / fwhm_L)**2)
 
 
 # ---------------------------------------------------------------------------
