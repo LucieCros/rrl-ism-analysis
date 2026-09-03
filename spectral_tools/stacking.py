@@ -70,9 +70,14 @@ def compute_line_snr(
     >>> snr, noise = compute_line_snr(line, width=1000)
     >>> print(f"S/N = {snr:.1f},  noise = {noise:.4f}")
     """
-    # ── Signal: mean of the central third ─────────────────────────────────
-    signal = np.nanmean(line[width // 3 : 2 * width // 3])
-
+    # ── Signal: peak of the central third ─────────────────────────────────
+    #signal = np.nanmean(line[width // 3 : 2 * width // 3])
+    line_ = line[width // 3 : 2 * width // 3]
+    signal_abs = max(-np.nanmin(line_), np.nanmax(line_))
+    signal_sign = -1 if (-np.nanmin(line_)> np.nanmax(line_)) else 1
+    
+    signal = signal_sign * signal_abs
+    
     # ── Noise: std of the wings (central part masked) ─────────────────────
     wings = np.copy(line)
     wings[width // 6 : 5 * width // 6] = np.nan
