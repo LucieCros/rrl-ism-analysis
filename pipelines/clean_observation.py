@@ -71,6 +71,8 @@ Command-line arguments
 -diag       Python list of sub-band indices to plot, e.g. ``[134,135]``.
 -test       Test mode: read files from the local directory instead of
             the cluster data root.
+-runlog     Write a per-observation log file (``LOG_temp_<name>.txt``)
+            in the output directory. Off by default.
 
 Dependencies
 ------------
@@ -169,6 +171,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-off",   "--off",                action="store_true")
     parser.add_argument("-test",  "--test",               action="store_true")
     parser.add_argument("-sv",    "--savgol_window",      type=int,  default=10)
+    parser.add_argument("-runlog", "--runlog",            action="store_true",
+                        help="Write a per-observation log file in the output "
+                             "directory (default: off).")
     return parser.parse_args()
 
 
@@ -239,7 +244,7 @@ def _find_clean_edges(meansmooth: np.ndarray, NCHAN: int,
     wind_len += 1 - wind_len % 2
 
     grad        = np.abs(np.diff(meansmooth, 2))
-    grad        = np.where(np.isnan(grad), 0.0, grad)
+    grad        = np.where(np.isfinite(grad), grad, 0.0)
     grad_smooth = savgol_filter(grad, wind_len, 5, mode="interp")
 
     # Evaluate threshold on the central half only (avoid edge artefacts)
@@ -260,6 +265,43 @@ def _find_clean_edges(meansmooth: np.ndarray, NCHAN: int,
     lo   = np.clip(indexes[jump],     NCHAN // 10,       NCHAN // 2 - NCHAN // 10)
     hi   = np.clip(indexes[jump + 1], NCHAN // 2 + NCHAN // 10, NCHAN - NCHAN // 10)
     return lo, hi
+
+
+def _ensure_finite(arr: np.ndarray, logfile, context: str) -> np.ndarray:
+    """
+    Replace any non-finite value in ``arr`` (in place) with the mean of its
+    finite values, or 0.0 if none are finite.
+
+    The various NaN-aware fills throughout this pipeline are meant to leave
+    no non-finite samples before a ``savgol_filter`` call, but newer scipy
+    raises on any residual NaN/Inf where older versions silently tolerated
+    them. This is a last-resort safety net, not a substitute for those
+    fills — a non-empty replacement here indicates an edge case slipped
+    through upstream masking and is logged as such.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Array to sanitise in place.
+    logfile : file object
+        Open log file to record how many samples were replaced.
+    context : str
+        Short description of where this array comes from, for the log.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``arr``, with non-finite entries replaced.
+    """
+    bad = ~np.isfinite(arr)
+    if np.any(bad):
+        good = ~bad
+        logfile.write(
+            f"  /!\\ {np.sum(bad)} non-finite sample(s) in {context} "
+            "— flat-filled\n"
+        )
+        arr[bad] = np.mean(arr[good]) if np.any(good) else 0.0
+    return arr
 
 
 # ---------------------------------------------------------------------------
@@ -303,17 +345,17 @@ def clean_observation(args: argparse.Namespace) -> None:
     epsi = 0.2
 
     # ── Log file ────────────────────────────────────────────────────────────
+    # Written to disk only when -runlog is passed; otherwise logfile.write()
+    # calls throughout this function are silently discarded.
     is_galactic = velo[0] >= 1000
     if is_galactic:
         logdir = os.path.join(args.path, f"reduced-gal/{args.myLine}")
-        suffix = "OFF" if args.off else ""
-        logfilename = os.path.join(logdir, f"LOG_temp_{args.name}{suffix}.txt")
     else:
         logdir = os.path.join(args.path, f"{args.myLine}/temp")
-        suffix = "OFF" if args.off else ""
-        logfilename = os.path.join(logdir, f"LOG_temp_{args.name}{suffix}.txt")
+    suffix = "OFF" if args.off else ""
+    logfilename = os.path.join(logdir, f"LOG_temp_{args.name}{suffix}.txt")
 
-    logfile = open(logfilename, "w")
+    logfile = open(logfilename, "w") if args.runlog else open(os.devnull, "w")
     logfile.write(f"Log for reduction of file {args.name}\n")
     logfile.write(f"created : {time.strftime('%Y/%m/%d-%H:%M:%S')}\n")
     logfile.write(f"Command line : {sys.argv}\n\n")
@@ -396,6 +438,12 @@ def clean_observation(args: argparse.Namespace) -> None:
                                       fill_value="extrapolate",
                                       bounds_error=False)(freq_all)
         large_correction  = I_noflat / I_smooth_large - 1.0
+        # I_smooth_large can be ~0 at a channel (e.g. a fully-flagged
+        # rebinned point), producing +-inf here. Treat that the same as NaN
+        # so every NaN-aware mask/fill downstream also catches it — newer
+        # scipy (savgol_filter) raises on non-finite input where older
+        # versions silently tolerated it.
+        large_correction[~np.isfinite(large_correction)] = np.nan
 
         # ── Step 1 : global sigma-clipping ──────────────────────────────────
         # sliding_rms gives a local noise estimate per channel without
@@ -448,16 +496,20 @@ def clean_observation(args: argparse.Namespace) -> None:
                 ARR01 = np.copy(SUBREF)   # panel 0 — after spike removal
 
             # ── RRL positions within this sub-band ──────────────────────────
+            # lines and n_transitions are built together, one velocity
+            # component at a time, so they stay parallel — n_transitions[ii]
+            # is always the transition number for lines[ii], including for
+            # multi-component sources where a sub-band may only contain
+            # lines from a non-first component.
             lines = []
+            n_transitions = []
             for v in velo:
-                lines += list(tools.get_line(
+                lines_v = tools.get_line(
                     FREF[0], FREF[-1], v - DELTAV,
                     args.myLine, path=RRLS_PATH
-                ))
-            n_transitions = list(tools.get_line(
-                FREF[0], FREF[-1], velo[0] - DELTAV,
-                args.myLine, path=RRLS_PATH
-            ).index)
+                )
+                lines         += list(lines_v)
+                n_transitions += list(lines_v.index)
 
             # ── Step 3 : 1st-order flattening — S-shape from neighbours ─────
             # Build a window of N_NEIGHBOURS sub-bands centred on current band.
@@ -553,6 +605,8 @@ def clean_observation(args: argparse.Namespace) -> None:
                 kind="linear", bounds_error=False, fill_value="nearest"
             )(FREF)
 
+            _ensure_finite(mean2, logfile, f"sub-band {band} neighbour baseline")
+
             wind_len  = max(len(mean2) // args.savgol_window, 5)
             wind_len += 1 - wind_len % 2    # ensure odd window length
             meansmooth = savgol_filter(mean2, wind_len, 3)
@@ -580,7 +634,7 @@ def clean_observation(args: argparse.Namespace) -> None:
 
             # Protect known RRL positions from clipping
             for ii, f_raie in enumerate(lines):
-                n_idx = n_transitions[ii] if ii < len(n_transitions) else n_transitions[-1]
+                n_idx = n_transitions[ii]
                 if mask > 0 and int(n_idx) in wVs.index:
                     # Mask width = args.mask × expected Voigt FWHM at this n
                     DeltaF = mask * wVs.loc[int(n_idx)].values
@@ -604,6 +658,26 @@ def clean_observation(args: argparse.Namespace) -> None:
             if in_diag:
                 ARR41 = np.copy(flat_sub2)   # panel 4 — after 1st RFI mitigation
 
+            # ── Reliability check (post RFI mitigation) ──────────────────────
+            # RRL masking combined with sigma-clipping can leave a sub-band
+            # entirely flagged even when it passed the earlier check; skip it
+            # rather than crash on the empty-array index below.
+            if np.all(np.isnan(flat_sub2)):
+                logfile.write(
+                    f"  Fully flagged sub-band {band} after RFI mitigation — skipped\n"
+                )
+                ITOTAL_flat = np.concatenate(
+                    [ITOTAL_flat, np.full(NCHAN, np.nan)]
+                )
+                ITOTAL_Jy = np.concatenate(
+                    [ITOTAL_Jy, np.full(NCHAN, np.nan)]
+                )
+                FTOTAL    = np.concatenate([FTOTAL, FREF])
+                Ilinefree = np.concatenate(
+                    [Ilinefree, np.full(NCHAN, np.nan)]
+                )
+                continue
+
             # ── Step 5 : 2nd-order flattening — residual faint baseline ──────
             # Interpolate NaNs in clean spectrum, separate into edge / middle
             # regions, then fit a Savitzky-Golay baseline.
@@ -617,8 +691,12 @@ def clean_observation(args: argparse.Namespace) -> None:
             cleanleft  = clean1[:indexes_lo]
             cleanright = clean1[indexes_hi:]
 
-            # Middle: replace NaN with sub-band mean
-            cleanmid[np.isnan(cleanmid)] = np.nanmean(cleanmid)
+            # Middle: replace NaN with sub-band mean (fallback to 0.0 if the
+            # whole interior is flagged — nanmean of an all-NaN slice is NaN)
+            if np.all(np.isnan(cleanmid)):
+                cleanmid[:] = 0.0
+            else:
+                cleanmid[np.isnan(cleanmid)] = np.nanmean(cleanmid)
 
             # Edges: linear interpolation; seed boundary with middle mean
             if np.isnan(cleanleft[-1]):
@@ -628,19 +706,34 @@ def clean_observation(args: argparse.Namespace) -> None:
 
             f_left  = FREF[:indexes_lo]
             f_right = FREF[indexes_hi:]
-            cleanleft = interp1d(
-                f_left[~np.isnan(cleanleft)],
-                cleanleft[~np.isnan(cleanleft)],
-                kind="linear", bounds_error=False
-            )(f_left)
-            cleanright = interp1d(
-                f_right[~np.isnan(cleanright)],
-                cleanright[~np.isnan(cleanright)],
-                kind="linear", bounds_error=False
-            )(f_right)
+            # Samples beyond the outermost valid point are held flat at that
+            # point's value (fill_value=(below, above)) rather than
+            # extrapolated, to avoid projecting noise/slope past the data;
+            # fall back to a flat fill entirely when fewer than 2 valid
+            # points remain (interp1d needs at least 2).
+            if np.sum(~np.isnan(cleanleft)) >= 2:
+                valid  = ~np.isnan(cleanleft)
+                y_left = cleanleft[valid]
+                cleanleft = interp1d(
+                    f_left[valid], y_left, kind="linear", bounds_error=False,
+                    fill_value=(y_left[0], y_left[-1]),
+                )(f_left)
+            else:
+                cleanleft = np.full_like(f_left, np.nanmean(cleanmid))
+            if np.sum(~np.isnan(cleanright)) >= 2:
+                valid   = ~np.isnan(cleanright)
+                y_right = cleanright[valid]
+                cleanright = interp1d(
+                    f_right[valid], y_right, kind="linear", bounds_error=False,
+                    fill_value=(y_right[0], y_right[-1]),
+                )(f_right)
+            else:
+                cleanright = np.full_like(f_right, np.nanmean(cleanmid))
 
             clean1   = np.concatenate([cleanleft, cleanmid, cleanright])
             linefree = np.copy(clean1)
+
+            _ensure_finite(clean1, logfile, f"sub-band {band} (2nd-order flattening)")
 
             wind_len2  = max(len(clean1) // 20, 5)
             wind_len2 += 1 - wind_len2 % 2
@@ -663,6 +756,7 @@ def clean_observation(args: argparse.Namespace) -> None:
             y22 = np.copy(y2)
             linefree[np.isnan(y2)] = 0.0
             y22[np.isnan(y2)]      = 0.0
+            _ensure_finite(y22, logfile, f"sub-band {band} (intra-line filter)")
 
             if args.special:
                 win3 = max(int(mask) + 1 - int(mask) % 2, 15)

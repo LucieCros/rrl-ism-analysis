@@ -20,14 +20,13 @@
 
 coarse:
   outdir: "../grids/coarse_grids/"
-  quantum_numbers: [431, 441, 451, 461, 471, 481, 491, 501, 516, 536, 556, 576, 596,
-                    616, 636, 656, 676, 696, 716, 736, 761, 791]
+  quantum_numbers: [436., 456., 476., 496., 516., 536., 556., 576., 596., 616., 636., 656., 676., 696.]
   parameters:
-    Te: [10,    500,  5]      # Electron temperature [K]
+    Te: [10,    300,  5]      # Electron temperature [K]
     Ne: [0.01,  0.1,  0.005]  # Electron density [cm^-3]
     T0: [0,     5000, 100]    # Temperature of the local radiation field [K]
     L:  [0,     50,   1]      # Path length through the emitting region [pc]
-    vt: [0,     30,   1]      # Non-thermal (turbulent) velocity [km/s]
+    vt: [0,     20,   1]      # Non-thermal (turbulent) velocity [km/s]
 
 fine:
   outdir: "../grids/fine_grids/"

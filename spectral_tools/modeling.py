@@ -377,7 +377,7 @@ def total_broadening(n, Ne: float, Te: float,
         Galactic background temperature [K]. Default 1400 K.
     v_turb : float, optional
         Turbulent velocity [km/s]. Default 0.
-    alpha : float, optional
+    alpha : float,     
         Background spectral index. Default -2.6.
 
     Returns
@@ -501,7 +501,7 @@ def lorentz_amplitude_from_area(area: float, fwhm_L: float) -> float:
 # Full Voigt line profile and surface generation
 # ---------------------------------------------------------------------------
 
-def full_voigt_line(center: float, n: int, Te: float, Ne: float,
+def full_voigt_line_v(center: float, n: int, Te: float, Ne: float,
                     v_turb: float, L: float, T0: float,
                     alpha: float = -2.6):
     """
@@ -545,7 +545,50 @@ def full_voigt_line(center: float, n: int, Te: float, Ne: float,
 
     return Voigt1D(x_0=center, amplitude_L=a_L, fwhm_L=fwhm_L, fwhm_G=fwhm_G)
 
+def full_voigt_line(center: float, n: int, Te: float, Ne: float,
+                    v_turb: float, L: float, T0: float,
+                    alpha: float = -2.6):
+    """
+    Build a :class:`~astropy.modeling.models.Voigt1D` instance for one CRRL.
 
+    All physical broadening terms are computed and converted to km/s before
+    being passed to Voigt1D.
+
+    Parameters
+    ----------
+    center : float
+        Line centre velocity [km/s].
+    n : int
+        Principal quantum number.
+    Te : float
+        Electron temperature [K].
+    Ne : float
+        Electron density [cm⁻³].
+    v_turb : float
+        Turbulent velocity [km/s].
+    L : float
+        Path length [pc].
+    T0 : float
+        Galactic background temperature [K].
+    alpha : float, optional
+        Background spectral index. Default -2.6.
+
+    Returns
+    -------
+    astropy.modeling.models.Voigt1D
+        Callable profile; evaluate on a velocity array with ``profile(v)``.
+    """
+    f0 = line_freq(n).value  # central frequency [MHz]
+
+    # Convert frequency widths to MHz
+    fwhm_G = doppler_broadening(n, Te, v_turb) 
+    fwhm_L = lorentzian_broadening(n, Ne, Te, T0, alpha) 
+
+    area   = integrated_area(n, Te, Ne, L) 
+    a_L    = lorentz_amplitude_from_area(area, fwhm_L)
+
+    return Voigt1D(x_0=center, amplitude_L=a_L, fwhm_L=fwhm_L, fwhm_G=fwhm_G)
+    
 def create_surface(vref: np.ndarray, quantum_numbers,
                    Te: float, Ne: float, T0: float,
                    v_turb: float, L: float, v0: float) -> np.ndarray:

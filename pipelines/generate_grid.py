@@ -326,6 +326,11 @@ def main() -> None:
     for nq in tqdm.tqdm(quantum_numbers,
                         desc=f"Generating {args.mode} grid"):
 
+        outpath = os.path.join(outdir, f"grid-{nq}.nc")
+        if os.path.exists(outpath):
+            tqdm.tqdm.write(f"  Skipping n={nq}: grid already exists ({outpath})")
+            continue
+
         n_block  = np.array([nq])
         nu0_arr  = np.array([line_freq(nq).value])  # central frequency [MHz]
         logn_arr = np.log(n_block)
@@ -379,7 +384,7 @@ def main() -> None:
             "area":   {"zlib": True, "complevel": 4, "dtype": "float32"},
         }
         ds.to_netcdf(
-            os.path.join(outdir, f"grid-{nq}.nc"),
+            outpath,
             mode="w", engine="netcdf4", encoding=encoding,
         )
 

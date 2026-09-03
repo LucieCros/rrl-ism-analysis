@@ -691,7 +691,6 @@ def corner_plot_chi2_old(da, mask_region, params=None, cmap='viridis',
                bbox_to_anchor=(0.75, 0.8), fontsize=9, frameon=False)
     return fig, axes
 
-
 def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
                       bubble_ids: list[int] = None,
                       bubble_colors: dict[int, str] = None,
@@ -700,7 +699,8 @@ def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
                       figsize: tuple[float, float] = None,
                       log_scale: list[str] = None, threshold: float = 1.30,
                       thresholds: tuple[float, ...] = (1.0, 1.15, 1.30),
-                      wspace: float = 0.05, hspace: float = 0.05) -> tuple[plt.Figure, np.ndarray]:
+                      wspace: float = 0.05, hspace: float = 0.05,
+                      bubble_threshold: float = 1.15) -> tuple[plt.Figure, np.ndarray]:
     """
     Corner plot of chi2 minimized by projection, with one or several
     connected regions ("bubbles") overlaid as colored contours on each panel.
@@ -738,6 +738,8 @@ def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
         on the diagonal panels.
     wspace, hspace : float
         Horizontal/vertical spacing between panels.
+    bubble_threshold : float
+        Uncertainty limit used to compute the solution bubbles.
 
     """
     PARAM_LABELS = {
@@ -771,7 +773,7 @@ def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
     vmax = threshold * chi2_min
 
     line_styles = ['solid', ':', '-.', '--', (0, (1, 1))]
-
+    hatchstyles = ["//"]*6
     fig, axes = plt.subplots(n, n, figsize=figsize or (2.3 * n, 2.3 * n))
 
     region_ranges = {b: {} for b in bubble_ids}  # per-bubble min/max per param
@@ -788,7 +790,7 @@ def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
                 profile = np.nanmin(grid, axis=reduce_axes)
                 x = coords[dims[i]]
                 ax.semilogy()
-                ax.plot(x, profile, color='steelblue', lw=1.5)
+                ax.plot(x, profile, color='gray', lw=1.5)
 
                 for k, s in enumerate(thresholds):
                     ax.axhline(s * chi2_min, color='gray',
@@ -801,8 +803,10 @@ def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
                     if proj_mask.any():
                         x_bubble = x[proj_mask]
                         region_ranges[b][dims[i]] = (x_bubble.min(), x_bubble.max())
+                        # ax.axvspan(x_bubble.min(), x_bubble.max(),
+                        #            color=bubble_colors[b], alpha=0.5)#, hatch="//", hatchcolor=bubble_colors[b])
                         ax.axvspan(x_bubble.min(), x_bubble.max(),
-                                   color=bubble_colors[b], alpha=0.25)
+                                   edgecolor=bubble_colors[b], lw=1.5, hatch=hatchstyles[b-1],fc="none")
 
                 if dims[i] in log_scale:
                     ax.set_xscale('log')
@@ -855,17 +859,52 @@ def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
     ax_text.axis('off')
 
     summary_bubble = min_bubble_id if min_bubble_id in region_ranges else bubble_ids[0]
-    lines = [f"{'Param':<8}{'min':>10}{'opt':>10}{'max':>10}"]
+    # print(summary_bubble)
+    # lines = [f"{'Param':<14}{'min':<14}{'opt':<14}{'max':<14}"]
+    # #lines = [f"Param\\t min\\t opt\\t max"]
+    
+    # for p in dims:
+    #     #print(p)
+    #     label = PARAM_LABELS.get(p, p)
+    #     unit = PARAM_UNITS.get(p, '')
+    #     vmin_p, vmax_p = region_ranges[summary_bubble].get(p, (np.nan, np.nan))
+    #     vopt_p = opt_vals[p]
+    #     name = f"{label} [{unit}]" if unit else label
+    #     #lines.append(f"{name:<14}{vmin_p:>10.3g}{vopt_p:>10.3g}{vmax_p:>10.3g}")
+    #     if p=="bla" :
+    #         lines.append(f"{name:<14}{vmin_p:<10.1g}{vopt_p:>10.1g}{vmax_p:>10.1g}")
+    #     else :
+    #         lines.append(f"{name:<14}{vmin_p:<14.4g}{vopt_p:<14.4g}{vmax_p:<14.4g}")
+
+    
+    # ax_text.text(0.5, 1., "\n".join(lines), transform=ax_text.transAxes,
+    #              fontsize=10, va='top', ha='left')
+    rows = []
     for p in dims:
         label = PARAM_LABELS.get(p, p)
         unit = PARAM_UNITS.get(p, '')
         vmin_p, vmax_p = region_ranges[summary_bubble].get(p, (np.nan, np.nan))
         vopt_p = opt_vals[p]
         name = f"{label} [{unit}]" if unit else label
-        lines.append(f"{name:<14}{vmin_p:>8.3g}{vopt_p:>10.3g}{vmax_p:>10.3g}")
-
-    ax_text.text(0.5, 1., "\n".join(lines), transform=ax_text.transAxes,
-                 fontsize=10, family='monospace', va='top', ha='center')
+        rows.append([name, f"{vmin_p:.4g}", f"{vopt_p:.4g}", f"{vmax_p:.4g}"])
+    
+    n_rows = len(rows) + 1  # +1 for header
+    row_height = 0.1
+    width = 1.75
+    
+    table = ax_text.table(
+        cellText=rows,
+        colLabels=['Param', 'min', 'opt', 'max'],
+        cellLoc='left',
+        bbox=[0.5, 1.0 - row_height * n_rows, width, row_height * n_rows],
+        edges='open',
+        transform=ax_text.transAxes,
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    for cell in table.get_celld().values():
+        cell.set_text_props(family='serif', ha='left')
+        cell.PAD = 0.02
 
     # --- global legend ---
     legend_handles = [
@@ -882,12 +921,12 @@ def corner_plot_chi2(da: xr.DataArray, labels: np.ndarray,
         tag = ' (best-fit)' if b == min_bubble_id else ''
         legend_handles.append(
             mpatches.Patch(edgecolor=bubble_colors[b], facecolor='none',
-                           label=f'Bubble {b}{tag} ($\\chi^2 \\leq$ {threshold:.2f}×'
+                           label=f'Region {b}{tag} ($\\chi^2 \\leq$ {bubble_threshold:.2f}×'
                                  '$\\chi^2_{\\rm min}$)')
         )
 
     fig.legend(handles=legend_handles, loc='upper right',
-               bbox_to_anchor=(0.75, 0.8), fontsize=9, frameon=False)
+               bbox_to_anchor=(0.75, 0.8), fontsize=9, frameon=False, va='bottom')
     return fig, axes
     
 def _make_heatmap_axes(fig) -> dict:

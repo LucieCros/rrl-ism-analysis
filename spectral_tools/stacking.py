@@ -353,7 +353,7 @@ def weighted_stack(
     lowest_n: int,
     width: int,
     snr_min: float = 0.0,
-    snr_max: float = 0.8,
+    snr_max: float = 6.0,
     verbose: bool = True,
 ) -> tuple[np.ndarray, list[int]]:
     """
@@ -366,7 +366,7 @@ def weighted_stack(
     ``[snr_min, snr_max]``:
 
     * ``snr < snr_min`` → likely emission-contaminated
-    * ``snr > snr_max`` → too faint / undetected
+    * ``snr > snr_max`` → deformed
 
     The normalised weighted average is then::
 
